@@ -95,17 +95,37 @@ ipcMain.handle('select-folder', async () => {
   return result.filePaths[0];
 });
 
-// Get files from directory
+// Get files from directory (recursively)
 ipcMain.handle('get-files', async (_event, folderPath: string, extension: string) => {
   try {
     if (!folderPath || !fs.existsSync(folderPath)) {
       return [];
     }
     
-    const files = fs.readdirSync(folderPath);
-    const filteredFiles = files.filter(file => file.endsWith(extension));
+    const files: string[] = [];
     
-    return filteredFiles;
+    // Recursive function to search directories
+    function searchDirectory(dir: string, baseDir: string) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        
+        if (entry.isDirectory()) {
+          // Recursively search subdirectories
+          searchDirectory(fullPath, baseDir);
+        } else if (entry.isFile() && entry.name.endsWith(extension)) {
+          // Get relative path from base folder
+          const relativePath = path.relative(baseDir, fullPath);
+          files.push(relativePath);
+        }
+      }
+    }
+    
+    searchDirectory(folderPath, folderPath);
+    
+    // Sort files alphabetically
+    return files.sort();
   } catch (error) {
     console.error('Error reading directory:', error);
     return [];
@@ -193,6 +213,8 @@ ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, 
       
       // Build FOP command
       const args = [
+        '-Djavax.xml.accessExternalStylesheet=all', // Allow external stylesheet access
+        '-Djavax.xml.accessExternalSchema=all', // Allow external schema access
         '-cp',
         classpath,
         'org.apache.fop.cli.Main',

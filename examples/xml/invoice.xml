@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<invoice xmlns="http://example.com/invoice"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://example.com/invoice ../xsd/invoice.xsd">
+  <invoiceNumber>INV-2025-001</invoiceNumber>
+  <invoiceDate>2025-11-13</invoiceDate>
+  
+  <customer>
+    <customerId>CUST-12345</customerId>
+    <name>Acme Corporation</name>
+    <address>
+      <street>123 Business Ave</street>
+      <city>New York</city>
+      <state>NY</state>
+      <zipCode>10001</zipCode>
+      <country>USA</country>
+    </address>
+    <contact>
+      <email>billing@acme.com</email>
+      <phone>+1-555-0123</phone>
+    </contact>
+  </customer>
+  
+  <items>
+    <item>
+      <itemId>PROD-001</itemId>
+      <description>Professional Services - Consulting</description>
+      <quantity>40</quantity>
+      <unitPrice>150.00</unitPrice>
+      <totalPrice>6000.00</totalPrice>
+    </item>
+    <item>
+      <itemId>PROD-002</itemId>
+      <description>Software License - Annual</description>
+      <quantity>5</quantity>
+      <unitPrice>299.99</unitPrice>
+      <totalPrice>1499.95</totalPrice>
+    </item>
+    <item>
+      <itemId>PROD-003</itemId>
+      <description>Technical Support Package</description>
+      <quantity>1</quantity>
+      <unitPrice>500.00</unitPrice>
+      <totalPrice>500.00</totalPrice>
+    </item>
+  </items>
+  
+  <summary>
+    <subtotal>7999.94</subtotal>
+    <taxRate>0.08</taxRate>
+    <taxAmount>640.00</taxAmount>
+    <total>8639.95</total>
+  </summary>
+  
+  <paymentTerms>Net 30</paymentTerms>
+  <notes>Thank you for your business!</notes>
+</invoice>

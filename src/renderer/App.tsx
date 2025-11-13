@@ -125,8 +125,14 @@ function App() {
     try {
       const folder = await window.electronAPI.selectFolder();
       if (folder) {
-        setXmlFolder(folder);
-        addLog(`Selected XML folder: ${folder}`);
+        // If same folder, force refresh by calling loadXmlFiles directly
+        if (folder === xmlFolder) {
+          addLog(`Refreshing XML folder: ${folder}`);
+          loadXmlFiles();
+        } else {
+          setXmlFolder(folder);
+          addLog(`Selected XML folder: ${folder}`);
+        }
       }
     } catch (error) {
       addLog(`Error selecting folder: ${error}`);
@@ -137,8 +143,14 @@ function App() {
     try {
       const folder = await window.electronAPI.selectFolder();
       if (folder) {
-        setXslFolder(folder);
-        addLog(`Selected XSL folder: ${folder}`);
+        // If same folder, force refresh by calling loadXslFiles directly
+        if (folder === xslFolder) {
+          addLog(`Refreshing XSL folder: ${folder}`);
+          loadXslFiles();
+        } else {
+          setXslFolder(folder);
+          addLog(`Selected XSL folder: ${folder}`);
+        }
       }
     } catch (error) {
       addLog(`Error selecting folder: ${error}`);
