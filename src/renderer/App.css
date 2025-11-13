@@ -234,13 +234,21 @@ body, html {
   background: rgba(255, 255, 255, 0.05) !important;
 }
 
-/* Selection colors */
-.editor-container .cm-selectionBackground {
-  background: #264f78 !important;
+/* Selection colors - primary selection should be brightest */
+.editor-container .cm-selectionBackground,
+.editor-container .cm-focused .cm-selectionBackground {
+  background: #3a6ea5 !important;
 }
 
-.editor-container .cm-focused .cm-selectionBackground {
-  background: #264f78 !important;
+.editor-container .cm-content ::selection {
+  background: #3a6ea5 !important;
+  color: #ffffff !important;
+}
+
+/* Matching text (should be dimmer than selection) */
+.editor-container .cm-selectionMatch {
+  background: rgba(58, 110, 165, 0.3) !important;
+  outline: 1px solid rgba(58, 110, 165, 0.5);
 }
 
 /* Cursor */
