@@ -1,6 +1,6 @@
-/* Force light theme globally */
+/* Dark theme globally */
 * {
-  color-scheme: light !important;
+  color-scheme: dark !important;
   box-sizing: border-box;
 }
 
@@ -10,6 +10,7 @@ body, html {
   overflow: hidden;
   height: 100vh;
   width: 100vw;
+  background: #1e1e1e;
 }
 
 .app-container {
@@ -20,22 +21,22 @@ body, html {
   width: 100vw;
   gap: 8px;
   padding: 8px;
-  background: #f5f5f5;
+  background: #1e1e1e;
   overflow: hidden;
 }
 
 .app-container * {
-  color-scheme: light !important;
+  color-scheme: dark !important;
 }
 
 .left-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: white;
+  background: #252526;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   overflow: hidden;
   min-height: 0;
 }
@@ -43,20 +44,20 @@ body, html {
 .right-panel {
   display: flex;
   flex-direction: column;
-  background: white;
+  background: #252526;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   overflow: hidden;
   min-height: 0;
 }
 
 .bottom-panel {
   grid-column: 1 / -1;
-  background: white;
+  background: #252526;
   border-radius: 8px;
   padding: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   height: 180px;
   min-height: 150px;
   max-height: 250px;
@@ -81,7 +82,7 @@ body, html {
 .folder-group label {
   font-size: 13px;
   font-weight: 500;
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .folder-input-group {
@@ -92,16 +93,16 @@ body, html {
 .folder-input-group input {
   flex: 1;
   padding: 6px 10px;
-  border: 1px solid #ddd;
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
   font-size: 13px;
-  background: #f9f9f9 !important;
-  color: #333 !important;
+  background: #3c3c3c !important;
+  color: #cccccc !important;
 }
 
 .folder-input-group button {
   padding: 6px 16px;
-  background: #007acc !important;
+  background: #0e639c !important;
   color: white !important;
   border: none;
   border-radius: 4px;
@@ -111,7 +112,7 @@ body, html {
 }
 
 .folder-input-group button:hover {
-  background: #005a9e !important;
+  background: #1177bb !important;
 }
 
 /* File Selection */
@@ -120,7 +121,7 @@ body, html {
   flex-direction: column;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #3c3c3c;
 }
 
 .file-group {
@@ -132,78 +133,78 @@ body, html {
 .file-group label {
   font-size: 13px;
   font-weight: 500;
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .file-group select {
   padding: 6px 10px;
-  border: 1px solid #ddd;
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
   font-size: 13px;
-  background: white !important;
-  color: #333 !important;
+  background: #3c3c3c !important;
+  color: #cccccc !important;
 }
 
 .file-group select:disabled {
-  background: #f5f5f5 !important;
-  color: #999 !important;
+  background: #2d2d2d !important;
+  color: #666666 !important;
 }
 
 .file-group select option {
-  background: white !important;
-  color: #333 !important;
+  background: #3c3c3c !important;
+  color: #cccccc !important;
 }
 
 /* Editor Tabs */
 .editor-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #3c3c3c;
   padding-top: 8px;
 }
 
 .tab {
   padding: 8px 16px;
-  background: #f5f5f5 !important;
-  border: 1px solid #ddd;
+  background: #2d2d2d !important;
+  border: 1px solid #3c3c3c;
   border-bottom: none;
   border-radius: 4px 4px 0 0;
   cursor: pointer;
   font-size: 13px;
   transition: background 0.2s;
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .tab:hover:not(:disabled) {
-  background: #e9e9e9 !important;
+  background: #3c3c3c !important;
 }
 
 .tab.active {
-  background: white !important;
-  border-bottom: 1px solid white;
+  background: #1e1e1e !important;
+  border-bottom: 1px solid #1e1e1e;
   margin-bottom: -1px;
   font-weight: 500;
-  color: #000 !important;
+  color: #ffffff !important;
 }
 
 .tab:disabled {
-  color: #999 !important;
+  color: #666666 !important;
   cursor: not-allowed;
 }
 
 /* Editor */
 .editor-container {
   flex: 1;
-  border: 1px solid #ddd;
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
   overflow: auto;
   min-height: 0;
-  background: white;
+  background: #1e1e1e;
 }
 
 .editor-container .cm-editor {
   height: 100%;
-  background: white !important;
+  background: #1e1e1e !important;
 }
 
 .editor-container .cm-scroller {
@@ -211,17 +212,40 @@ body, html {
 }
 
 .editor-container .cm-content {
-  background: white !important;
-  color: #000 !important;
+  background: #1e1e1e !important;
+  color: #d4d4d4 !important;
 }
 
 .editor-container .cm-line {
-  color: #000 !important;
+  color: #d4d4d4 !important;
 }
 
 .editor-container .cm-gutters {
-  background: #f5f5f5 !important;
-  border-right: 1px solid #ddd !important;
+  background: #1e1e1e !important;
+  border-right: 1px solid #3c3c3c !important;
+}
+
+/* Active line highlighting */
+.editor-container .cm-activeLine {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.editor-container .cm-activeLineGutter {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Selection colors */
+.editor-container .cm-selectionBackground {
+  background: #264f78 !important;
+}
+
+.editor-container .cm-focused .cm-selectionBackground {
+  background: #264f78 !important;
+}
+
+/* Cursor */
+.editor-container .cm-cursor {
+  border-left-color: #ffffff !important;
 }
 
 /* Controls */
@@ -230,7 +254,7 @@ body, html {
   gap: 12px;
   align-items: center;
   padding-top: 8px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #3c3c3c;
 }
 
 .btn {
@@ -249,21 +273,21 @@ body, html {
 }
 
 .btn-primary {
-  background: #28a745 !important;
+  background: #0e7e30 !important;
   color: white !important;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #218838 !important;
+  background: #0c6b28 !important;
 }
 
 .btn-secondary {
-  background: #007acc !important;
+  background: #0e639c !important;
   color: white !important;
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #005a9e !important;
+  background: #1177bb !important;
 }
 
 .auto-generate {
@@ -271,7 +295,7 @@ body, html {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #666 !important;
+  color: #cccccc !important;
   margin-left: auto;
   cursor: pointer;
 }
@@ -286,14 +310,14 @@ body, html {
   justify-content: space-between;
   align-items: center;
   padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #3c3c3c;
   margin-bottom: 12px;
 }
 
 .pdf-toolbar h3 {
   font-size: 16px;
   font-weight: 500;
-  color: #333 !important;
+  color: #cccccc !important;
   margin: 0;
 }
 
@@ -302,25 +326,25 @@ body, html {
   gap: 8px;
   align-items: center;
   font-size: 13px;
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .pdf-controls span {
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .pdf-controls button {
   padding: 4px 12px;
-  background: #f5f5f5 !important;
-  border: 1px solid #ddd;
+  background: #2d2d2d !important;
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .pdf-controls button:hover:not(:disabled) {
-  background: #e9e9e9 !important;
+  background: #3c3c3c !important;
 }
 
 .pdf-controls button:disabled {
@@ -330,10 +354,10 @@ body, html {
 
 .pdf-viewer {
   flex: 1;
-  border: 1px solid #ddd;
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
   overflow: auto;
-  background: #fafafa;
+  background: #2d2d2d;
   min-height: 0;
 }
 
@@ -347,20 +371,20 @@ body, html {
 .pdf-viewer::-webkit-scrollbar-track,
 .editor-container::-webkit-scrollbar-track,
 .logs-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #1e1e1e;
 }
 
 .pdf-viewer::-webkit-scrollbar-thumb,
 .editor-container::-webkit-scrollbar-thumb,
 .logs-content::-webkit-scrollbar-thumb {
-  background: #888;
+  background: #424242;
   border-radius: 5px;
 }
 
 .pdf-viewer::-webkit-scrollbar-thumb:hover,
 .editor-container::-webkit-scrollbar-thumb:hover,
 .logs-content::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #4e4e4e;
 }
 
 .pdf-placeholder {
@@ -369,14 +393,14 @@ body, html {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #999 !important;
+  color: #666666 !important;
   gap: 8px;
 }
 
 .pdf-placeholder p {
   margin: 0;
   font-size: 14px;
-  color: #999 !important;
+  color: #666666 !important;
 }
 
 /* Logs Panel */
@@ -390,30 +414,31 @@ body, html {
 .logs-header h3 {
   font-size: 14px;
   font-weight: 500;
-  color: #333 !important;
+  color: #cccccc !important;
   margin: 0;
 }
 
 .logs-header button {
   padding: 4px 12px;
-  background: #f5f5f5 !important;
-  border: 1px solid #ddd;
+  background: #2d2d2d !important;
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
-  color: #333 !important;
+  color: #cccccc !important;
 }
 
 .logs-header button:hover {
-  background: #e9e9e9 !important;
+  background: #3c3c3c !important;
 }
 
 .logs-content {
   flex: 1;
   padding: 12px;
-  background: #1e1e1e;
+  background: #0e0e0e;
   color: #d4d4d4;
   border-radius: 4px;
+  border: 1px solid #3c3c3c;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   overflow-y: auto;
