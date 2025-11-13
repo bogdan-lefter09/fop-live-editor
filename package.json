@@ -1,0 +1,78 @@
+{
+  "name": "fop-live-editor",
+  "version": "0.1.0",
+  "description": "FOP Live Editor - Electron app for editing and previewing XSL-FO transformations",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently \"npm run dev:vite\" \"npm run dev:electron\" --kill-others",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http-get://localhost:5173 && electron .",
+    "build": "npm run build:renderer && npm run build:electron",
+    "build:renderer": "tsc && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "package": "npm run build && electron-builder --win --x64",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "electron",
+    "fop",
+    "xsl-fo",
+    "pdf",
+    "editor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.42",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
+    "electron": "^39.1.2",
+    "electron-builder": "^24.9.1",
+    "electronmon": "^2.0.2",
+    "typescript": "^5.3.3",
+    "vite": "^7.2.2",
+    "vite-plugin-electron": "^0.28.0",
+    "wait-on": "^9.0.3"
+  },
+  "dependencies": {
+    "@codemirror/lang-xml": "^6.0.2",
+    "@codemirror/state": "^6.4.0",
+    "@codemirror/view": "^6.23.0",
+    "@uiw/react-codemirror": "^4.21.21",
+    "chokidar": "^3.5.3",
+    "electron-store": "^8.1.0",
+    "pdfjs-dist": "^5.4.394",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "build": {
+    "appId": "com.fop-live-editor.app",
+    "productName": "FOP Live Editor",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "extraResources": [
+      {
+        "from": "assets/bundled",
+        "to": "bundled",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    }
+  }
+}
