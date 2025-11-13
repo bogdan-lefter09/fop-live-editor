@@ -22,7 +22,7 @@ function App() {
   
   // State for logs
   const [logs, setLogs] = useState<string>('')
-  const [autoGenerate, setAutoGenerate] = useState<boolean>(false)
+  const [autoGenerate, setAutoGenerate] = useState<boolean>(true)
   const [isGenerating, setIsGenerating] = useState<boolean>(false)
   
   // Load files when XML folder changes
@@ -168,9 +168,28 @@ function App() {
       const fileName = currentFile.split('\\').pop();
       addLog(`✓ Saved ${fileName}`);
       
-      // Auto-generate PDF if enabled
-      if (autoGenerate && selectedXml && selectedXsl) {
-        handleGenerate();
+      // Ensure the saved file is properly selected in the dropdown
+      if (fileName) {
+        if (currentFile.toLowerCase().endsWith('.xml') && xmlFolder) {
+          const relativePath = currentFile.replace(xmlFolder + '\\', '');
+          if (selectedXml !== relativePath) {
+            setSelectedXml(relativePath);
+          }
+        } else if (currentFile.toLowerCase().endsWith('.xsl') && xslFolder) {
+          const relativePath = currentFile.replace(xslFolder + '\\', '');
+          if (selectedXsl !== relativePath) {
+            setSelectedXsl(relativePath);
+          }
+        }
+      }
+      
+      // Auto-generate PDF if enabled (check after a short delay to allow state updates)
+      if (autoGenerate) {
+        setTimeout(() => {
+          if (selectedXml && selectedXsl) {
+            handleGenerate();
+          }
+        }, 100);
       }
     } catch (error) {
       addLog(`✗ Error saving file: ${error}`);
