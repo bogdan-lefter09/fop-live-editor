@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document>
+  <title>Sample Document</title>
+  <metadata>
+    <author>John Doe</author>
+    <date>2025-11-13</date>
+    <version>1.0</version>
+  </metadata>
+  <content>
+    <section id="introduction">
+      <heading>Introduction</heading>
+      <paragraph>
+        This is a sample XML document for testing the FOP Live Editor application.
+        It demonstrates basic XML structure with nested elements.
+      </paragraph>
+    </section>
+    <section id="features">
+      <heading>Features</heading>
+      <paragraph>
+        The FOP Live Editor allows you to:
+      </paragraph>
+      <list>
+        <item>Edit XML and XSL files in real-time</item>
+        <item>Preview generated PDF output</item>
+        <item>Auto-generate PDFs on save</item>
+        <item>View transformation logs and errors</item>
+      </list>
+    </section>
+    <section id="conclusion">
+      <heading>Conclusion</heading>
+      <paragraph>
+        This example demonstrates how XML content can be transformed into PDF
+        using XSL-FO stylesheets with Apache FOP.
+      </paragraph>
+    </section>
+  </content>
+</document>
