@@ -128,7 +128,33 @@ App size:
 Bundling JRE will increase installer size significantly (~50–100+ MB).
 Testing installer:
 Build and install on a clean Windows VM to verify bundled Java and FOP are found and run correctly.
-Phase 10 — Testing & QA (practical checklist)
+Phase 10 — Auto-update functionality
+
+Use electron-updater (built into electron-builder) to provide automatic updates.
+Configure electron-builder to publish releases:
+Set publish configuration in electron-builder config (e.g., GitHub releases, S3, or custom server)
+Generate latest.yml manifest file during build (electron-builder does this automatically)
+Main process auto-update logic:
+Import autoUpdater from electron-updater
+Check for updates on app startup
+Listen for update events: update-available, update-downloaded, error
+Notify renderer when update is available or downloaded
+Provide IPC handlers for: check-for-updates, download-update, quit-and-install
+User interaction:
+Show notification in UI when update is available (e.g., banner or dialog)
+Provide "Download Update" and "Install and Restart" buttons
+Option to skip version or remind later
+Auto-download updates in background (configurable)
+Testing:
+Test update flow by creating a new release with higher version number
+Verify update download, installation, and version upgrade
+Test rollback scenario if update fails
+Security:
+Code-sign the application (required for Windows auto-updates to work smoothly)
+Verify update signatures to prevent tampering
+Use HTTPS for update server
+
+Phase 11 — Testing & QA (practical checklist)
 
 Functional tests:
 Select XML and XSL folders, edit XML/XSL, Save -> PDF generated -> Preview updated.
@@ -139,7 +165,7 @@ Edge cases:
 Large output PDFs render and do not block UI.
 Binary transfer (IPC) for PDF does not crash renderer.
 Windows-specific checks:
-App.run on Windows 10/11, installer works, antiviruses don’t block bundled java.exe (test).
+App.run on Windows 10/11, installer works, antiviruses don't block bundled java.exe (test).
 Logging for support:
 Keep a copy-to-clipboard for error logs and stack traces.
 Make it easy to open settings folder or show the generated PDF path for troubleshooting.
