@@ -24,6 +24,7 @@ function App() {
   const [logs, setLogs] = useState<string>('')
   const [autoGenerate, setAutoGenerate] = useState<boolean>(true)
   const [isGenerating, setIsGenerating] = useState<boolean>(false)
+  const [showLogs, setShowLogs] = useState<boolean>(false)
   
   // Load files when XML folder changes
   useEffect(() => {
@@ -212,20 +213,29 @@ function App() {
       const result = await window.electronAPI.generatePdf(xmlPath, xslPath, xslFolder);
 
       if (result.success) {
-        // Create blob URL for PDF preview
-        const uint8Array = new Uint8Array(result.pdfBuffer);
-        const blob = new Blob([uint8Array], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        
         // Revoke old URL if exists
         if (pdfUrl) {
           URL.revokeObjectURL(pdfUrl);
         }
         
-        setPdfUrl(url);
+        // Use file:// protocol to stream PDF instead of loading into memory
+        // Add timestamp to force iframe reload (bypass cache)
+        const fileUrl = `file:///${result.outputPath.replace(/\\/g, '/')}?t=${Date.now()}`;
+        setPdfUrl(fileUrl);
+      } else {
+        // Clear PDF on error
+        if (pdfUrl) {
+          URL.revokeObjectURL(pdfUrl);
+        }
+        setPdfUrl('');
       }
     } catch (error: any) {
       addLog(`\n✗ Error: ${error.message}\n`);
+      // Clear PDF on error
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+      setPdfUrl('');
     } finally {
       setIsGenerating(false);
     }
@@ -350,9 +360,6 @@ function App() {
       
       {/* Right Panel */}
       <div className="right-panel">
-        <div className="pdf-toolbar">
-          <h3>PDF Preview</h3>
-        </div>
         <div className="pdf-viewer">
           {pdfUrl ? (
             <iframe 
@@ -362,21 +369,42 @@ function App() {
             />
           ) : (
             <div className="pdf-placeholder">
-              <p>No PDF generated yet</p>
-              <p>Select XML and XSL files, then click Generate PDF</p>
+              {logs && logs.includes('✗') ? (
+                <>
+                  <p>❌ PDF Generation Failed</p>
+                  <p>Check the Output/Errors panel for details</p>
+                </>
+              ) : (
+                <>
+                  <p>No PDF generated yet</p>
+                  <p>Select XML and XSL files, then click Generate PDF</p>
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
       
       {/* Bottom Panel */}
-      <div className="bottom-panel">
-        <div className="logs-header">
-          <h3>Output / Errors</h3>
-          <button onClick={() => setLogs('')}>Clear</button>
+      {showLogs && (
+        <div className="bottom-panel">
+          <div className="logs-header">
+            <h3>Output / Errors</h3>
+            <div className="logs-actions">
+              <button onClick={() => setLogs('')}>Clear</button>
+              <button onClick={() => setShowLogs(false)}>Hide</button>
+            </div>
+          </div>
+          <pre className="logs-content">{logs || 'No output yet...'}</pre>
         </div>
-        <pre className="logs-content">{logs || 'No output yet...'}</pre>
-      </div>
+      )}
+      
+      {/* Logs Toggle Button */}
+      {!showLogs && (
+        <button className="logs-toggle" onClick={() => setShowLogs(true)}>
+          Show Output / Errors
+        </button>
+      )}
     </div>
   )
 }

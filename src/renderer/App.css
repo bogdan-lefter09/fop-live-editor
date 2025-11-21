@@ -426,6 +426,11 @@ body, html {
   margin: 0;
 }
 
+.logs-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .logs-header button {
   padding: 4px 12px;
   background: #2d2d2d !important;
@@ -455,4 +460,25 @@ body, html {
   line-height: 1.5;
   min-height: 0;
   word-wrap: break-word;
+}
+
+/* Logs Toggle Button */
+.logs-toggle {
+  grid-column: 1 / -1;
+  padding: 8px 16px;
+  background: #252526 !important;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #cccccc !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.logs-toggle:hover {
+  background: #2d2d2d !important;
+  border-color: #0e639c;
+  color: #ffffff !important;
 }

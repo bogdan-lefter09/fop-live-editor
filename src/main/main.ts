@@ -1,12 +1,21 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 let mainWindow: BrowserWindow | null = null;
-let currentFopProcess: any = null;
+let fopServerProcess: ChildProcess | null = null;
+let fopServerReady = false;
+let pendingRequests: Map<number, PendingRequest> = new Map();
+let requestIdCounter = 0;
+
+interface PendingRequest {
+  resolve: (value: any) => void;
+  reject: (reason?: any) => void;
+  requestId: number;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -17,6 +26,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: true,
+      webSecurity: false, // Allow file:// protocol access for PDF streaming
     },
   });
 
@@ -41,6 +52,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  startFopServer(); // Start FOP server on app startup
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -50,10 +62,176 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopFopServer(); // Stop FOP server on app quit
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
+
+app.on('before-quit', () => {
+  stopFopServer();
+});
+
+// FOP Server Management
+function startFopServer() {
+  if (fopServerProcess) {
+    console.log('FOP server already running');
+    return;
+  }
+
+  const paths = getBundledPaths();
+  const serverDir = path.join(paths.fopDir, 'server');
+  
+  // Build classpath
+  const libDir = path.join(paths.fopDir, 'lib');
+  const buildDir = path.join(paths.fopDir, 'build');
+  
+  const libJars = fs.readdirSync(libDir)
+    .filter(file => file.endsWith('.jar'))
+    .map(file => path.join(libDir, file));
+  
+  const buildJars = fs.readdirSync(buildDir)
+    .filter(file => file.endsWith('.jar'))
+    .map(file => path.join(buildDir, file));
+  
+  const gsonJar = path.join(serverDir, 'gson-2.10.1.jar');
+  
+  const allJars = [...buildJars, ...libJars, gsonJar];
+  const classpath = allJars.join(path.delimiter) + path.delimiter + serverDir;
+  
+  const args = [
+    '-Xms128m',
+    '-Xmx512m',
+    '-XX:+UseG1GC',
+    '-XX:MaxGCPauseMillis=50',
+    '-Djavax.xml.accessExternalStylesheet=all',
+    '-Djavax.xml.accessExternalSchema=all',
+    '-Dfop.fontcache=temp',
+    '-cp',
+    classpath,
+    'FopServer'
+  ];
+
+  console.log('Starting FOP server...');
+  console.log('Java:', paths.javaExe);
+  console.log('Working dir:', serverDir);
+
+  fopServerProcess = spawn(paths.javaExe, args, {
+    cwd: serverDir,
+    windowsHide: true,
+  });
+
+  let responseBuffer = '';
+
+  fopServerProcess.stdout?.on('data', (data: Buffer) => {
+    const text = data.toString();
+    responseBuffer += text;
+    
+    // Process complete responses (delimited by newlines)
+    const lines = responseBuffer.split('\n');
+    responseBuffer = lines.pop() || ''; // Keep incomplete line in buffer
+    
+    for (const line of lines) {
+      if (line.startsWith('RESPONSE:')) {
+        const jsonStr = line.substring(9);
+        try {
+          const response = JSON.parse(jsonStr);
+          handleFopServerResponse(response);
+        } catch (e) {
+          console.error('Failed to parse FOP response:', e);
+        }
+      }
+    }
+  });
+
+  fopServerProcess.stderr?.on('data', (data: Buffer) => {
+    console.error('FOP Server stderr:', data.toString());
+  });
+
+  fopServerProcess.on('close', (code: number) => {
+    console.log(`FOP server exited with code ${code}`);
+    fopServerReady = false;
+    fopServerProcess = null;
+    
+    // Reject all pending requests
+    pendingRequests.forEach(req => {
+      req.reject(new Error('FOP server process terminated'));
+    });
+    pendingRequests.clear();
+  });
+
+  fopServerProcess.on('error', (error: Error) => {
+    console.error('FOP server error:', error);
+    fopServerReady = false;
+  });
+}
+
+function stopFopServer() {
+  if (!fopServerProcess) return;
+
+  try {
+    // Send shutdown command
+    sendFopCommand({ action: 'shutdown' });
+    
+    // Give it a moment to shut down gracefully
+    setTimeout(() => {
+      if (fopServerProcess && !fopServerProcess.killed) {
+        fopServerProcess.kill();
+      }
+    }, 1000);
+  } catch (e) {
+    console.error('Error stopping FOP server:', e);
+    if (fopServerProcess) {
+      fopServerProcess.kill();
+    }
+  }
+  
+  fopServerProcess = null;
+  fopServerReady = false;
+}
+
+function sendFopCommand(command: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (!fopServerProcess || !fopServerReady) {
+      if (command.action !== 'ping') {
+        reject(new Error('FOP server not ready'));
+        return;
+      }
+    }
+
+    const requestId = ++requestIdCounter;
+    pendingRequests.set(requestId, { resolve, reject, requestId });
+    
+    const commandWithId = { ...command, requestId };
+    const jsonCommand = JSON.stringify(commandWithId) + '\n';
+    
+    fopServerProcess?.stdin?.write(jsonCommand);
+  });
+}
+
+function handleFopServerResponse(response: any) {
+  if (response.status === 'ready') {
+    console.log('FOP server ready!');
+    fopServerReady = true;
+    return;
+  }
+
+  const requestId = response.requestId;
+  const pending = pendingRequests.get(requestId);
+  
+  if (!pending) {
+    console.warn('Received response for unknown request:', requestId);
+    return;
+  }
+
+  pendingRequests.delete(requestId);
+
+  if (response.status === 'error') {
+    pending.reject(new Error(response.message));
+  } else {
+    pending.resolve(response);
+  }
+}
 
 // Helper: Get bundled resource paths
 function getBundledPaths() {
@@ -163,154 +341,58 @@ ipcMain.handle('save-file', async (_event, filePath: string, content: string) =>
   }
 });
 
-// Generate PDF with FOP
+// Generate PDF with FOP Server
 ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, xslFolder: string) => {
-  return new Promise((resolve, reject) => {
-    try {
-      // Kill previous process if running
-      if (currentFopProcess) {
-        currentFopProcess.kill();
-        currentFopProcess = null;
-      }
-
-      const paths = getBundledPaths();
-      const outputPdf = getOutputPdfPath();
-
-      // Validate bundled resources exist
-      if (!fs.existsSync(paths.javaExe)) {
-        reject(new Error(`Java not found at: ${paths.javaExe}`));
-        return;
-      }
-      if (!fs.existsSync(paths.fopJar)) {
-        reject(new Error(`FOP not found at: ${paths.fopJar}`));
-        return;
-      }
-      if (!fs.existsSync(xmlPath)) {
-        reject(new Error(`XML file not found: ${xmlPath}`));
-        return;
-      }
-      if (!fs.existsSync(xslPath)) {
-        reject(new Error(`XSL file not found: ${xslPath}`));
-        return;
-      }
-
-      // Build classpath (include fop.jar and all lib jars)
-      const libDir = path.join(paths.fopDir, 'lib');
-      const buildDir = path.join(paths.fopDir, 'build');
-      
-      // Get all jars from lib directory
-      const libJars = fs.readdirSync(libDir)
-        .filter(file => file.endsWith('.jar'))
-        .map(file => path.join(libDir, file));
-      
-      // Get all jars from build directory
-      const buildJars = fs.readdirSync(buildDir)
-        .filter(file => file.endsWith('.jar'))
-        .map(file => path.join(buildDir, file));
-      
-      // Combine all jars into classpath
-      const allJars = [...buildJars, ...libJars];
-      const classpath = allJars.join(path.delimiter);
-      
-      // Build FOP command
-      const args = [
-        '-Djavax.xml.accessExternalStylesheet=all', // Allow external stylesheet access
-        '-Djavax.xml.accessExternalSchema=all', // Allow external schema access
-        '-cp',
-        classpath,
-        'org.apache.fop.cli.Main',
-        '-xml',
-        xmlPath,
-        '-xsl',
-        xslPath,
-        '-pdf',
-        outputPdf
-      ];
-
-      // Send initial log
-      if (mainWindow) {
-        mainWindow.webContents.send('generation-log', `Starting FOP generation...\n`);
-        mainWindow.webContents.send('generation-log', `Java: ${paths.javaExe}\n`);
-        mainWindow.webContents.send('generation-log', `FOP: ${paths.fopJar}\n`);
-        mainWindow.webContents.send('generation-log', `XML: ${xmlPath}\n`);
-        mainWindow.webContents.send('generation-log', `XSL: ${xslPath}\n`);
-        mainWindow.webContents.send('generation-log', `Output: ${outputPdf}\n`);
-        mainWindow.webContents.send('generation-log', `Working dir: ${xslFolder}\n\n`);
-      }
-
-      // Spawn FOP process
-      currentFopProcess = spawn(paths.javaExe, args, {
-        cwd: xslFolder, // Set working directory to XSL folder for relative imports
-        windowsHide: true,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      // Capture stdout
-      currentFopProcess.stdout.on('data', (data: Buffer) => {
-        const text = data.toString();
-        stdout += text;
-        if (mainWindow) {
-          mainWindow.webContents.send('generation-log', text);
-        }
-      });
-
-      // Capture stderr
-      currentFopProcess.stderr.on('data', (data: Buffer) => {
-        const text = data.toString();
-        stderr += text;
-        if (mainWindow) {
-          mainWindow.webContents.send('generation-log', text);
-        }
-      });
-
-      // Handle process exit
-      currentFopProcess.on('close', (code: number) => {
-        currentFopProcess = null;
-
-        if (code === 0) {
-          // Success - read PDF and send to renderer
-          try {
-            if (fs.existsSync(outputPdf)) {
-              const pdfBuffer = fs.readFileSync(outputPdf);
-              if (mainWindow) {
-                mainWindow.webContents.send('generation-log', `\n✓ PDF generated successfully!\n`);
-              }
-              resolve({
-                success: true,
-                pdfBuffer: Array.from(pdfBuffer),
-                outputPath: outputPdf,
-                stdout,
-                stderr
-              });
-            } else {
-              reject(new Error('PDF file was not created'));
-            }
-          } catch (error) {
-            reject(error);
-          }
-        } else {
-          // Error
-          const errorMsg = `FOP process exited with code ${code}\n${stderr}`;
-          if (mainWindow) {
-            mainWindow.webContents.send('generation-log', `\n✗ Generation failed: ${errorMsg}\n`);
-          }
-          reject(new Error(errorMsg));
-        }
-      });
-
-      // Handle process errors
-      currentFopProcess.on('error', (error: Error) => {
-        currentFopProcess = null;
-        if (mainWindow) {
-          mainWindow.webContents.send('generation-log', `\n✗ Process error: ${error.message}\n`);
-        }
-        reject(error);
-      });
-
-    } catch (error) {
-      reject(error);
+  try {
+    if (!fopServerReady) {
+      throw new Error('FOP server is not ready. Please wait...');
     }
-  });
+
+    const outputPdf = getOutputPdfPath();
+
+    // Validate input files exist
+    if (!fs.existsSync(xmlPath)) {
+      throw new Error(`XML file not found: ${xmlPath}`);
+    }
+    if (!fs.existsSync(xslPath)) {
+      throw new Error(`XSL file not found: ${xslPath}`);
+    }
+
+    // Send initial log
+    if (mainWindow) {
+      mainWindow.webContents.send('generation-log', `Starting FOP generation...\n`);
+      mainWindow.webContents.send('generation-log', `XML: ${xmlPath}\n`);
+      mainWindow.webContents.send('generation-log', `XSL: ${xslPath}\n`);
+      mainWindow.webContents.send('generation-log', `Output: ${outputPdf}\n`);
+      mainWindow.webContents.send('generation-log', `Working dir: ${xslFolder}\n\n`);
+    }
+
+    // Send generation command to FOP server
+    const response = await sendFopCommand({
+      action: 'generate',
+      xmlPath,
+      xslPath,
+      outputPath: outputPdf,
+      workingDir: xslFolder
+    });
+
+    if (response.status === 'success') {
+      if (mainWindow) {
+        mainWindow.webContents.send('generation-log', `\n✓ ${response.message}\n`);
+      }
+
+      // Return file path instead of buffer - let renderer stream it
+      return {
+        success: true,
+        outputPath: outputPdf
+      };
+    } else {
+      throw new Error(response.message || 'Unknown error');
+    }
+  } catch (error: any) {
+    if (mainWindow) {
+      mainWindow.webContents.send('generation-log', `\n✗ Error: ${error.message}\n`);
+    }
+    throw error;
+  }
 });
