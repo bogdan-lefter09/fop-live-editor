@@ -174,21 +174,18 @@ Code-sign the application (required for Windows auto-updates to work smoothly)
 Verify update signatures to prevent tampering
 Use HTTPS for update server
 
-Phase 11 — Testing & QA (practical checklist)
+Phase 11 — Testing & QA (manual testing only)
 
-Functional tests:
+Manual testing checklist:
 Select XML and XSL folders, edit XML/XSL, Save -> PDF generated -> Preview updated.
 XSL with xsl:include uses relative includes and works.
 Long path names and spaces work (paths properly quoted).
 Kill and restart generation while a generation is in progress — no orphan processes remain.
 Edge cases:
 Large output PDFs render and do not block UI.
-Binary transfer (IPC) for PDF does not crash renderer.
 Windows-specific checks:
-App.run on Windows 10/11, installer works, antiviruses don't block bundled java.exe (test).
-Logging for support:
-Keep a copy-to-clipboard for error logs and stack traces.
-Make it easy to open settings folder or show the generated PDF path for troubleshooting.
+App runs on Windows 10/11, installer works.
+Note: Formal automated testing not implemented - manual testing used for validation.
 MVP (minimum you should implement for v1)
 
 Electron app shell + React + Vite setup.
