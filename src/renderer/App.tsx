@@ -203,6 +203,18 @@ function App() {
       return;
     }
 
+    // Save current file first if there are unsaved changes
+    if (currentFile && editorContent) {
+      try {
+        await window.electronAPI.saveFile(currentFile, editorContent);
+        const fileName = currentFile.split('\\').pop();
+        addLog(`✓ Saved ${fileName}`);
+      } catch (error) {
+        addLog(`✗ Error saving file: ${error}`);
+        return; // Don't generate if save fails
+      }
+    }
+
     setIsGenerating(true);
     setLogs(''); // Clear previous logs
 
