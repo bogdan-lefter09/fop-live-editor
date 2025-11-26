@@ -1,6 +1,6 @@
 {
   "name": "fop-live-editor",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "FOP Live Editor - Electron app for editing and previewing XSL-FO transformations",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -44,6 +44,7 @@
     "@uiw/react-codemirror": "^4.21.21",
     "chokidar": "^3.5.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
     "pdfjs-dist": "^5.4.394",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
@@ -51,6 +52,13 @@
   "build": {
     "appId": "com.fop-live-editor.app",
     "productName": "FOP Live Editor",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bogdan-lefter09",
+        "repo": "fop-live-editor"
+      }
+    ],
     "win": {
       "target": [
         {

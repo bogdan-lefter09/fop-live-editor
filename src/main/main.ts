@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
+import { autoUpdater } from 'electron-updater';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -53,6 +54,11 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
   startFopServer(); // Start FOP server on app startup
+  
+  // Check for updates (only in production)
+  if (!isDev) {
+    setupAutoUpdater();
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -394,5 +400,90 @@ ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, 
       mainWindow.webContents.send('generation-log', `\n✗ Error: ${error.message}\n`);
     }
     throw error;
+  }
+});
+
+// Auto-updater setup
+function setupAutoUpdater() {
+  // Disable auto-download - user chooses when to download
+  autoUpdater.autoDownload = false;
+  
+  // Check for updates silently on startup
+  autoUpdater.checkForUpdates().catch(err => {
+    console.log('Update check failed:', err);
+  });
+
+  // When update is available, notify renderer
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', {
+        version: info.version,
+        releaseDate: info.releaseDate,
+        releaseNotes: info.releaseNotes
+      });
+    }
+  });
+
+  // When update is downloaded, notify renderer
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', {
+        version: info.version
+      });
+    }
+  });
+
+  // Error handling
+  autoUpdater.on('error', (err) => {
+    console.error('Update error:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err.message);
+    }
+  });
+
+  // Download progress
+  autoUpdater.on('download-progress', (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-progress', {
+        percent: progress.percent,
+        transferred: progress.transferred,
+        total: progress.total
+      });
+    }
+  });
+}
+
+// IPC handlers for update actions
+ipcMain.handle('check-for-updates', async () => {
+  if (isDev) {
+    return { available: false, message: 'Updates disabled in development' };
+  }
+  
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { available: true, updateInfo: result?.updateInfo };
+  } catch (error: any) {
+    return { available: false, error: error.message };
+  }
+});
+
+ipcMain.handle('download-update', async () => {
+  if (isDev) {
+    return { success: false, message: 'Updates disabled in development' };
+  }
+  
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('quit-and-install', () => {
+  if (!isDev) {
+    autoUpdater.quitAndInstall(false, true);
   }
 });

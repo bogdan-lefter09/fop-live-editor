@@ -26,6 +26,13 @@ function App() {
   const [isGenerating, setIsGenerating] = useState<boolean>(false)
   const [showLogs, setShowLogs] = useState<boolean>(false)
   
+  // State for updates
+  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false)
+  const [updateInfo, setUpdateInfo] = useState<any>(null)
+  const [updateDownloaded, setUpdateDownloaded] = useState<boolean>(false)
+  const [downloadProgress, setDownloadProgress] = useState<number>(0)
+  const [isDownloading, setIsDownloading] = useState<boolean>(false)
+  
   // Load files when XML folder changes
   useEffect(() => {
     if (xmlFolder) {
@@ -82,6 +89,31 @@ function App() {
       });
     }
   }, []);
+  
+  // Listen for update events
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.onUpdateAvailable?.((info: any) => {
+        setUpdateAvailable(true);
+        setUpdateInfo(info);
+      });
+      
+      window.electronAPI.onUpdateDownloaded?.((_info: any) => {
+        setUpdateDownloaded(true);
+        setIsDownloading(false);
+      });
+      
+      window.electronAPI.onUpdateProgress?.((progress: any) => {
+        setDownloadProgress(progress.percent);
+      });
+      
+      window.electronAPI.onUpdateError?.((error: string) => {
+        console.error('Update error:', error);
+        setIsDownloading(false);
+      });
+    }
+  }, []);
+
   
   // Helper functions
   const loadXmlFiles = async () => {
@@ -253,10 +285,66 @@ function App() {
     }
   };
 
+  const handleDownloadUpdate = async () => {
+    setIsDownloading(true);
+    try {
+      await window.electronAPI.downloadUpdate?.();
+    } catch (error) {
+      console.error('Failed to download update:', error);
+      setIsDownloading(false);
+    }
+  };
+
+  const handleInstallUpdate = () => {
+    window.electronAPI.quitAndInstall?.();
+  };
+
   return (
     <div className="app-container">
-      {/* Left Panel */}
-      <div className="left-panel">
+      {/* Update Notification Banner */}
+      {updateAvailable && !updateDownloaded && (
+        <div className="update-banner">
+          <div className="update-info">
+            ℹ️ New version {updateInfo?.version} is available!
+          </div>
+          <div className="update-actions">
+            {isDownloading ? (
+              <div className="update-progress">
+                Downloading... {Math.round(downloadProgress)}%
+              </div>
+            ) : (
+              <button 
+                className="btn btn-primary" 
+                onClick={handleDownloadUpdate}
+              >
+                Download Update
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Update Downloaded Banner */}
+      {updateDownloaded && (
+        <div className="update-banner update-ready">
+          <div className="update-info">
+            ✓ Update downloaded and ready to install!
+          </div>
+          <div className="update-actions">
+            <button 
+              className="btn btn-success" 
+              onClick={handleInstallUpdate}
+            >
+              Install and Restart
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Main Content */}
+      <div className="app-content">
+        {/* Left Panel */}
+        <div className="left-panel">
         {/* Folder Selection */}
         <div className="folder-selection">
           <div className="folder-group">
@@ -417,6 +505,7 @@ function App() {
           Show Output / Errors
         </button>
       )}
+      </div>
     </div>
   )
 }
