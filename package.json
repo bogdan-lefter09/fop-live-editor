@@ -11,6 +11,7 @@
     "build:renderer": "tsc && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "package": "npm run build && electron-builder --win --x64",
+    "package:dev": "npm run build && node -r dotenv/config node_modules/electron-builder/out/cli/cli.js --win --x64",
     "preview": "vite preview"
   },
   "keywords": [
@@ -29,6 +30,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
     "cross-env": "^10.1.0",
+    "dotenv": "^17.2.3",
     "electron": "^39.1.2",
     "electron-builder": "^24.9.1",
     "electronmon": "^2.0.2",

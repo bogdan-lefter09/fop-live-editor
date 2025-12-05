@@ -55,10 +55,8 @@ app.whenReady().then(() => {
   createWindow();
   startFopServer(); // Start FOP server on app startup
   
-  // Check for updates (only in production)
-  if (!isDev) {
-    setupAutoUpdater();
-  }
+  // Check for updates
+  setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -405,12 +403,33 @@ ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, 
 
 // Auto-updater setup
 function setupAutoUpdater() {
+  // Enable console logging for debugging
+  autoUpdater.logger = console;
+  
+  // TEMPORARILY: Allow pre-releases for testing (both dev and production)
+  // TODO: Change to `autoUpdater.allowPrerelease = isDev;` after stable release
+  autoUpdater.allowPrerelease = true;
+  
   // Disable auto-download - user chooses when to download
   autoUpdater.autoDownload = false;
   
+  // Event: Checking for updates
+  autoUpdater.on('checking-for-update', () => {
+    console.log('🔍 Checking for updates...');
+    console.log('Pre-release mode:', autoUpdater.allowPrerelease ? 'enabled' : 'disabled');
+    console.log('Current version:', app.getVersion());
+    console.log('Is dev:', isDev);
+    console.log('Is packaged:', app.isPackaged);
+  });
+  
+  // Event: Update not available
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('✓ No updates available. Current version:', info.version);
+  });
+  
   // Check for updates silently on startup
   autoUpdater.checkForUpdates().catch(err => {
-    console.log('Update check failed:', err);
+    console.log('❌ Update check failed:', err.message);
   });
 
   // When update is available, notify renderer
@@ -445,6 +464,7 @@ function setupAutoUpdater() {
 
   // Download progress
   autoUpdater.on('download-progress', (progress) => {
+    console.log(`Download progress: ${Math.round(progress.percent)}%`);
     if (mainWindow) {
       mainWindow.webContents.send('update-progress', {
         percent: progress.percent,
