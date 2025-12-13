@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
@@ -49,6 +49,65 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Create application menu
+  createApplicationMenu();
+}
+
+function createApplicationMenu() {
+  const template: any[] = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New PDF Workspace',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-new-workspace');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Exit',
+          accelerator: 'CmdOrCtrl+Q',
+          click: () => {
+            app.quit();
+          }
+        }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 app.whenReady().then(() => {
@@ -341,6 +400,140 @@ ipcMain.handle('save-file', async (_event, filePath: string, content: string) =>
     return { success: true };
   } catch (error) {
     console.error('Error saving file:', error);
+    throw error;
+  }
+});
+
+// Scan workspace files
+ipcMain.handle('scan-workspace-files', async (_event, workspacePath: string) => {
+  try {
+    if (!workspacePath || !fs.existsSync(workspacePath)) {
+      return { xml: [], xsl: [] };
+    }
+
+    const xmlFolder = path.join(workspacePath, 'xml');
+    const xslFolder = path.join(workspacePath, 'xsl');
+
+    const xmlFiles: string[] = [];
+    const xslFiles: string[] = [];
+
+    // Scan XML folder
+    if (fs.existsSync(xmlFolder)) {
+      const files = fs.readdirSync(xmlFolder);
+      for (const file of files) {
+        const filePath = path.join(xmlFolder, file);
+        if (fs.statSync(filePath).isFile() && file.endsWith('.xml')) {
+          xmlFiles.push(`xml/${file}`);
+        }
+      }
+    }
+
+    // Scan XSL folder
+    if (fs.existsSync(xslFolder)) {
+      const files = fs.readdirSync(xslFolder);
+      for (const file of files) {
+        const filePath = path.join(xslFolder, file);
+        if (fs.statSync(filePath).isFile() && (file.endsWith('.xsl') || file.endsWith('.xslt'))) {
+          xslFiles.push(`xsl/${file}`);
+        }
+      }
+    }
+
+    return {
+      xml: xmlFiles.sort(),
+      xsl: xslFiles.sort()
+    };
+  } catch (error) {
+    console.error('Error scanning workspace files:', error);
+    return { xml: [], xsl: [] };
+  }
+});
+
+// Create workspace
+ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspaceName: string) => {
+  try {
+    if (!parentFolder || !workspaceName) {
+      throw new Error('Parent folder and workspace name are required');
+    }
+
+    // Create workspace folder
+    const workspacePath = path.join(parentFolder, workspaceName);
+    
+    // Check if workspace already exists
+    if (fs.existsSync(workspacePath)) {
+      throw new Error('Workspace folder already exists');
+    }
+
+    // Create main workspace folder
+    fs.mkdirSync(workspacePath, { recursive: true });
+
+    // Create XML and XSL subfolders
+    const xmlFolder = path.join(workspacePath, 'xml');
+    const xslFolder = path.join(workspacePath, 'xsl');
+    fs.mkdirSync(xmlFolder, { recursive: true });
+    fs.mkdirSync(xslFolder, { recursive: true });
+
+    // Create .fop-editor-workspace.json
+    const workspaceConfig = {
+      workspaceName: workspaceName,
+      selectedXmlFile: null,
+      selectedXslFile: null,
+      autoGenerate: true,
+      openFiles: []
+    };
+    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
+    fs.writeFileSync(configPath, JSON.stringify(workspaceConfig, null, 2), 'utf-8');
+
+    // If in dev mode, copy example files
+    if (isDev) {
+      // In dev mode, examples are in the project root
+      // __dirname is dist-electron/, so go up one level to reach project root
+      const examplesPath = path.join(__dirname, '../examples');
+      
+      if (fs.existsSync(examplesPath)) {
+        const exampleXmlPath = path.join(examplesPath, 'xml');
+        const exampleXslPath = path.join(examplesPath, 'xsl');
+
+        let copiedCount = 0;
+
+        // Copy XML files
+        if (fs.existsSync(exampleXmlPath)) {
+          const xmlFiles = fs.readdirSync(exampleXmlPath);
+          for (const file of xmlFiles) {
+            const srcPath = path.join(exampleXmlPath, file);
+            const destPath = path.join(xmlFolder, file);
+            if (fs.statSync(srcPath).isFile()) {
+              fs.copyFileSync(srcPath, destPath);
+              copiedCount++;
+            }
+          }
+        }
+
+        // Copy XSL files
+        if (fs.existsSync(exampleXslPath)) {
+          const xslFiles = fs.readdirSync(exampleXslPath);
+          for (const file of xslFiles) {
+            const srcPath = path.join(exampleXslPath, file);
+            const destPath = path.join(xslFolder, file);
+            if (fs.statSync(srcPath).isFile()) {
+              fs.copyFileSync(srcPath, destPath);
+              copiedCount++;
+            }
+          }
+        }
+
+        console.log(`Copied ${copiedCount} example files to workspace`);
+      } else {
+        console.log('Warning: Examples folder not found at:', examplesPath);
+      }
+    }
+
+    return {
+      success: true,
+      workspacePath: workspacePath
+    };
+  } catch (error: any) {
+    console.error('Error creating workspace:', error);
     throw error;
   }
 });

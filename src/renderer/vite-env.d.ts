@@ -16,6 +16,17 @@ interface Window {
     }>;
     onGenerationLog: (callback: (log: string) => void) => void;
     
+    // Workspace functions
+    createWorkspace: (folderPath: string, workspaceName: string) => Promise<{
+      success: boolean;
+      workspacePath: string;
+      message?: string;
+    }>;
+    scanWorkspaceFiles: (workspacePath: string) => Promise<{
+      xml: string[];
+      xsl: string[];
+    }>;
+    
     // Update functions
     checkForUpdates?: () => Promise<{ available: boolean; updateInfo?: any; message?: string; error?: string }>;
     downloadUpdate?: () => Promise<{ success: boolean; error?: string; message?: string }>;
@@ -24,5 +35,11 @@ interface Window {
     onUpdateDownloaded?: (callback: (info: any) => void) => void;
     onUpdateProgress?: (callback: (progress: any) => void) => void;
     onUpdateError?: (callback: (error: string) => void) => void;
+  };
+  electron: {
+    ipcRenderer: {
+      on: (channel: string, func: (...args: any[]) => void) => void;
+      removeListener: (channel: string, func: (...args: any[]) => void) => void;
+    };
   };
 }
