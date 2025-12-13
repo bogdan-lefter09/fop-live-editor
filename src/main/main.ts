@@ -40,7 +40,7 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
-  
+
   // Log any errors
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     console.error('Failed to load:', errorCode, errorDescription);
@@ -113,7 +113,7 @@ function createApplicationMenu() {
 app.whenReady().then(() => {
   createWindow();
   startFopServer(); // Start FOP server on app startup
-  
+
   // Check for updates
   setupAutoUpdater();
 
@@ -144,24 +144,24 @@ function startFopServer() {
 
   const paths = getBundledPaths();
   const serverDir = path.join(paths.fopDir, 'server');
-  
+
   // Build classpath
   const libDir = path.join(paths.fopDir, 'lib');
   const buildDir = path.join(paths.fopDir, 'build');
-  
+
   const libJars = fs.readdirSync(libDir)
     .filter(file => file.endsWith('.jar'))
     .map(file => path.join(libDir, file));
-  
+
   const buildJars = fs.readdirSync(buildDir)
     .filter(file => file.endsWith('.jar'))
     .map(file => path.join(buildDir, file));
-  
+
   const gsonJar = path.join(serverDir, 'gson-2.10.1.jar');
-  
+
   const allJars = [...buildJars, ...libJars, gsonJar];
   const classpath = allJars.join(path.delimiter) + path.delimiter + serverDir;
-  
+
   const args = [
     '-Xms128m',
     '-Xmx512m',
@@ -189,11 +189,11 @@ function startFopServer() {
   fopServerProcess.stdout?.on('data', (data: Buffer) => {
     const text = data.toString();
     responseBuffer += text;
-    
+
     // Process complete responses (delimited by newlines)
     const lines = responseBuffer.split('\n');
     responseBuffer = lines.pop() || ''; // Keep incomplete line in buffer
-    
+
     for (const line of lines) {
       if (line.startsWith('RESPONSE:')) {
         const jsonStr = line.substring(9);
@@ -215,7 +215,7 @@ function startFopServer() {
     console.log(`FOP server exited with code ${code}`);
     fopServerReady = false;
     fopServerProcess = null;
-    
+
     // Reject all pending requests
     pendingRequests.forEach(req => {
       req.reject(new Error('FOP server process terminated'));
@@ -235,7 +235,7 @@ function stopFopServer() {
   try {
     // Send shutdown command
     sendFopCommand({ action: 'shutdown' });
-    
+
     // Give it a moment to shut down gracefully
     setTimeout(() => {
       if (fopServerProcess && !fopServerProcess.killed) {
@@ -248,7 +248,7 @@ function stopFopServer() {
       fopServerProcess.kill();
     }
   }
-  
+
   fopServerProcess = null;
   fopServerReady = false;
 }
@@ -264,10 +264,10 @@ function sendFopCommand(command: any): Promise<any> {
 
     const requestId = ++requestIdCounter;
     pendingRequests.set(requestId, { resolve, reject, requestId });
-    
+
     const commandWithId = { ...command, requestId };
     const jsonCommand = JSON.stringify(commandWithId) + '\n';
-    
+
     fopServerProcess?.stdin?.write(jsonCommand);
   });
 }
@@ -281,7 +281,7 @@ function handleFopServerResponse(response: any) {
 
   const requestId = response.requestId;
   const pending = pendingRequests.get(requestId);
-  
+
   if (!pending) {
     console.warn('Received response for unknown request:', requestId);
     return;
@@ -299,7 +299,7 @@ function handleFopServerResponse(response: any) {
 // Helper: Get bundled resource paths
 function getBundledPaths() {
   let resourcesPath: string;
-  
+
   if (isDev) {
     // In development, assets are in the project root
     resourcesPath = path.join(app.getAppPath(), 'assets/bundled');
@@ -329,11 +329,11 @@ ipcMain.handle('select-folder', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory']
   });
-  
+
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
-  
+
   return result.filePaths[0];
 });
 
@@ -343,16 +343,16 @@ ipcMain.handle('get-files', async (_event, folderPath: string, extension: string
     if (!folderPath || !fs.existsSync(folderPath)) {
       return [];
     }
-    
+
     const files: string[] = [];
-    
+
     // Recursive function to search directories
     function searchDirectory(dir: string, baseDir: string) {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        
+
         if (entry.isDirectory()) {
           // Recursively search subdirectories
           searchDirectory(fullPath, baseDir);
@@ -363,9 +363,9 @@ ipcMain.handle('get-files', async (_event, folderPath: string, extension: string
         }
       }
     }
-    
+
     searchDirectory(folderPath, folderPath);
-    
+
     // Sort files alphabetically
     return files.sort();
   } catch (error) {
@@ -380,7 +380,7 @@ ipcMain.handle('read-file', async (_event, filePath: string) => {
     if (!filePath || !fs.existsSync(filePath)) {
       throw new Error('File not found');
     }
-    
+
     const content = fs.readFileSync(filePath, 'utf-8');
     return content;
   } catch (error) {
@@ -395,7 +395,7 @@ ipcMain.handle('save-file', async (_event, filePath: string, content: string) =>
     if (!filePath) {
       throw new Error('File path is required');
     }
-    
+
     fs.writeFileSync(filePath, content, 'utf-8');
     return { success: true };
   } catch (error) {
@@ -458,7 +458,7 @@ ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspac
 
     // Create workspace folder
     const workspacePath = path.join(parentFolder, workspaceName);
-    
+
     // Check if workspace already exists
     if (fs.existsSync(workspacePath)) {
       throw new Error('Workspace folder already exists');
@@ -489,7 +489,7 @@ ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspac
       // In dev mode, examples are in the project root
       // __dirname is dist-electron/, so go up one level to reach project root
       const examplesPath = path.join(__dirname, '../examples');
-      
+
       if (fs.existsSync(examplesPath)) {
         const exampleXmlPath = path.join(examplesPath, 'xml');
         const exampleXslPath = path.join(examplesPath, 'xsl');
@@ -534,6 +534,42 @@ ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspac
     };
   } catch (error: any) {
     console.error('Error creating workspace:', error);
+    throw error;
+  }
+});
+
+// Load workspace settings
+ipcMain.handle('load-workspace-settings', async (_event, workspacePath: string) => {
+  try {
+    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
+
+    if (!fs.existsSync(configPath)) {
+      // Return default settings if file doesn't exist
+      return {
+        workspaceName: path.basename(workspacePath),
+        selectedXmlFile: '',
+        selectedXslFile: '',
+        autoGenerate: false,
+        openFiles: []
+      };
+    }
+
+    const content = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error: any) {
+    console.error('Error loading workspace settings:', error);
+    throw error;
+  }
+});
+
+// Save workspace settings
+ipcMain.handle('save-workspace-settings', async (_event, workspacePath: string, settings: any) => {
+  try {
+    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
+    fs.writeFileSync(configPath, JSON.stringify(settings, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error saving workspace settings:', error);
     throw error;
   }
 });
@@ -598,14 +634,14 @@ ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, 
 function setupAutoUpdater() {
   // Enable console logging for debugging
   autoUpdater.logger = console;
-  
+
   // TEMPORARILY: Allow pre-releases for testing (both dev and production)
   // TODO: Change to `autoUpdater.allowPrerelease = isDev;` after stable release
   autoUpdater.allowPrerelease = true;
-  
+
   // Disable auto-download - user chooses when to download
   autoUpdater.autoDownload = false;
-  
+
   // Event: Checking for updates
   autoUpdater.on('checking-for-update', () => {
     console.log('🔍 Checking for updates...');
@@ -614,12 +650,12 @@ function setupAutoUpdater() {
     console.log('Is dev:', isDev);
     console.log('Is packaged:', app.isPackaged);
   });
-  
+
   // Event: Update not available
   autoUpdater.on('update-not-available', (info) => {
     console.log('✓ No updates available. Current version:', info.version);
   });
-  
+
   // Check for updates silently on startup
   autoUpdater.checkForUpdates().catch(err => {
     console.log('❌ Update check failed:', err.message);
@@ -673,7 +709,7 @@ ipcMain.handle('check-for-updates', async () => {
   if (isDev) {
     return { available: false, message: 'Updates disabled in development' };
   }
-  
+
   try {
     const result = await autoUpdater.checkForUpdates();
     return { available: true, updateInfo: result?.updateInfo };
@@ -686,7 +722,7 @@ ipcMain.handle('download-update', async () => {
   if (isDev) {
     return { success: false, message: 'Updates disabled in development' };
   }
-  
+
   try {
     await autoUpdater.downloadUpdate();
     return { success: true };

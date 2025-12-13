@@ -15,7 +15,7 @@ interface Window {
       stderr: string;
     }>;
     onGenerationLog: (callback: (log: string) => void) => void;
-    
+
     // Workspace functions
     createWorkspace: (folderPath: string, workspaceName: string) => Promise<{
       success: boolean;
@@ -26,7 +26,17 @@ interface Window {
       xml: string[];
       xsl: string[];
     }>;
-    
+    loadWorkspaceSettings: (workspacePath: string) => Promise<{
+      workspaceName: string;
+      selectedXmlFile: string;
+      selectedXslFile: string;
+      autoGenerate: boolean;
+      openFiles: string[];
+    }>;
+    saveWorkspaceSettings: (workspacePath: string, settings: any) => Promise<{
+      success: boolean;
+    }>;
+
     // Update functions
     checkForUpdates?: () => Promise<{ available: boolean; updateInfo?: any; message?: string; error?: string }>;
     downloadUpdate?: () => Promise<{ success: boolean; error?: string; message?: string }>;

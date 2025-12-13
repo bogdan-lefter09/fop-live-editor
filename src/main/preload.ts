@@ -8,11 +8,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (filePath: string, content: string) => ipcRenderer.invoke('save-file', filePath, content),
   createWorkspace: (parentFolder: string, workspaceName: string) => ipcRenderer.invoke('create-workspace', parentFolder, workspaceName),
   scanWorkspaceFiles: (workspacePath: string) => ipcRenderer.invoke('scan-workspace-files', workspacePath),
+  loadWorkspaceSettings: (workspacePath: string) => ipcRenderer.invoke('load-workspace-settings', workspacePath),
+  saveWorkspaceSettings: (workspacePath: string, settings: any) => ipcRenderer.invoke('save-workspace-settings', workspacePath, settings),
   generatePdf: (xmlPath: string, xslPath: string, xslFolder: string) => ipcRenderer.invoke('generate-pdf', xmlPath, xslPath, xslFolder),
   onGenerationLog: (callback: (log: string) => void) => {
     ipcRenderer.on('generation-log', (_event, log) => callback(log));
   },
-  
+
   // Update functions
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

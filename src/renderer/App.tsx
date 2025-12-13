@@ -21,42 +21,42 @@ function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [showWorkspaceForm, setShowWorkspaceForm] = useState<boolean>(false)
-  
+
   // Workspace form state
   const [workspaceFolder, setWorkspaceFolder] = useState<string>('')
   const [workspaceName, setWorkspaceName] = useState<string>('')
-  
+
   // UI state for active workspace
   const [showFileExplorer, setShowFileExplorer] = useState<boolean>(true)
   const [showSearch, setShowSearch] = useState<boolean>(false)
-  
+
   // Files in active workspace
   const [workspaceFiles, setWorkspaceFiles] = useState<{ xml: string[], xsl: string[] }>({ xml: [], xsl: [] })
-  
+
   // Toolbar state
   const [selectedXmlFile, setSelectedXmlFile] = useState<string>('')
   const [selectedXslFile, setSelectedXslFile] = useState<string>('')
   const [autoGenerate, setAutoGenerate] = useState<boolean>(false)
-  
+
   // Editor state for open files
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
   const editorRef = useRef<any>(null)
-  
-  // State for PDF preview
-  const [pdfUrl, setPdfUrl] = useState<string>('')
-  
+
+  // State for PDF preview (per workspace)
+  const [workspacePdfUrls, setWorkspacePdfUrls] = useState<Map<string, string>>(new Map())
+
   // State for logs
   const [logs, setLogs] = useState<string>('')
   const [showLogs, setShowLogs] = useState<boolean>(false)
-  
+
   // State for updates
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false)
   const [updateInfo, setUpdateInfo] = useState<any>(null)
   const [updateDownloaded, setUpdateDownloaded] = useState<boolean>(false)
   const [downloadProgress, setDownloadProgress] = useState<number>(0)
   const [isDownloading, setIsDownloading] = useState<boolean>(false)
-  
+
   // Listen for generation logs
   useEffect(() => {
     if (window.electronAPI) {
@@ -65,7 +65,7 @@ function App() {
       });
     }
   }, []);
-  
+
   // Listen for update events
   useEffect(() => {
     if (window.electronAPI) {
@@ -73,16 +73,16 @@ function App() {
         setUpdateAvailable(true);
         setUpdateInfo(info);
       });
-      
+
       window.electronAPI.onUpdateDownloaded?.((_info: any) => {
         setUpdateDownloaded(true);
         setIsDownloading(false);
       });
-      
+
       window.electronAPI.onUpdateProgress?.((progress: any) => {
         setDownloadProgress(progress.percent);
       });
-      
+
       window.electronAPI.onUpdateError?.((error: string) => {
         console.error('Update error:', error);
         setIsDownloading(false);
@@ -98,7 +98,7 @@ function App() {
 
     if (window.electron && window.electron.ipcRenderer) {
       window.electron.ipcRenderer.on('menu-new-workspace', handleNewWorkspace);
-      
+
       return () => {
         window.electron.ipcRenderer.removeListener('menu-new-workspace', handleNewWorkspace);
       };
@@ -139,11 +139,11 @@ function App() {
     try {
       // Call IPC to create workspace folder structure
       const result = await window.electronAPI.createWorkspace(workspaceFolder, workspaceName);
-      
+
       if (result.success) {
         // Check if workspace is already open
         const isAlreadyOpen = workspaces.some(w => w.path === result.workspacePath);
-        
+
         if (isAlreadyOpen) {
           alert('This workspace is already open');
           // Reset form but don't create duplicate
@@ -167,7 +167,7 @@ function App() {
 
         setWorkspaces([...workspaces, newWorkspace]);
         setActiveWorkspaceId(newWorkspace.id);
-        
+
         // Reset form
         setShowWorkspaceForm(false);
         setWorkspaceFolder('');
@@ -182,7 +182,7 @@ function App() {
   const handleCloseWorkspace = (workspaceId: string) => {
     const updatedWorkspaces = workspaces.filter(w => w.id !== workspaceId);
     setWorkspaces(updatedWorkspaces);
-    
+
     // If closing active workspace, switch to another or show form
     if (activeWorkspaceId === workspaceId) {
       if (updatedWorkspaces.length > 0) {
@@ -195,19 +195,20 @@ function App() {
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
 
-  // Load workspace files when active workspace changes
+  // Load workspace files and settings when active workspace changes
   useEffect(() => {
     if (activeWorkspace) {
       loadWorkspaceFiles(activeWorkspace.path);
-      // Reset toolbar selections when switching workspace
-      setSelectedXmlFile('');
-      setSelectedXslFile('');
+      loadWorkspaceSettings(activeWorkspace.path);
       // Clear open files when switching workspace
       setOpenFiles([]);
       setActiveFileIndex(-1);
     } else {
       // Clear files when no workspace is active
       setWorkspaceFiles({ xml: [], xsl: [] });
+      setSelectedXmlFile('');
+      setSelectedXslFile('');
+      setAutoGenerate(false);
       setOpenFiles([]);
       setActiveFileIndex(-1);
     }
@@ -221,6 +222,41 @@ function App() {
       console.error('Error loading workspace files:', error);
     }
   };
+
+  const loadWorkspaceSettings = async (workspacePath: string) => {
+    try {
+      const settings = await window.electronAPI.loadWorkspaceSettings(workspacePath);
+      setSelectedXmlFile(settings.selectedXmlFile || '');
+      setSelectedXslFile(settings.selectedXslFile || '');
+      setAutoGenerate(settings.autoGenerate || false);
+    } catch (error) {
+      console.error('Error loading workspace settings:', error);
+    }
+  };
+
+  const saveWorkspaceSettings = async () => {
+    if (!activeWorkspace) return;
+
+    try {
+      const settings = {
+        workspaceName: activeWorkspace.name,
+        selectedXmlFile,
+        selectedXslFile,
+        autoGenerate,
+        openFiles: openFiles.map(f => f.path.replace(activeWorkspace.path + '\\', ''))
+      };
+      await window.electronAPI.saveWorkspaceSettings(activeWorkspace.path, settings);
+    } catch (error) {
+      console.error('Error saving workspace settings:', error);
+    }
+  };
+
+  // Save settings when toolbar selections change
+  useEffect(() => {
+    if (activeWorkspace && (selectedXmlFile || selectedXslFile)) {
+      saveWorkspaceSettings();
+    }
+  }, [selectedXmlFile, selectedXslFile, autoGenerate]);
 
   const handleFileClick = async (filePath: string) => {
     if (!activeWorkspace) return;
@@ -256,7 +292,7 @@ function App() {
 
   const handleCloseFile = (index: number) => {
     const file = openFiles[index];
-    
+
     // Check if file has unsaved changes
     if (file.isDirty) {
       const confirmClose = confirm(`${file.name} has unsaved changes. Close anyway?`);
@@ -299,7 +335,7 @@ function App() {
     const file = openFiles[activeFileIndex];
     try {
       await window.electronAPI.saveFile(file.path, file.content);
-      
+
       // Update file state
       const updatedFiles = [...openFiles];
       updatedFiles[activeFileIndex] = {
@@ -311,6 +347,40 @@ function App() {
     } catch (error) {
       console.error('Error saving file:', error);
       alert(`Failed to save file: ${error}`);
+    }
+  };
+
+  // Generate PDF
+  const handleGeneratePDF = async () => {
+    if (!activeWorkspace || !selectedXmlFile || !selectedXslFile) {
+      alert('Please select both XML and XSL files');
+      return;
+    }
+
+    try {
+      // Clear previous logs
+      setLogs('');
+      setShowLogs(true);
+
+      // Build full paths
+      const xmlPath = `${activeWorkspace.path}\\${selectedXmlFile}`;
+      const xslPath = `${activeWorkspace.path}\\${selectedXslFile}`;
+
+      // XSL folder is the directory containing the XSL file
+      const xslFolder = `${activeWorkspace.path}\\xsl`;
+
+      // Call IPC to generate PDF
+      const result = await window.electronAPI.generatePdf(xmlPath, xslPath, xslFolder);
+
+      if (result.success) {
+        // Load the generated PDF with timestamp to prevent caching
+        const timestamp = new Date().getTime();
+        const newUrl = `file:///${result.outputPath.replace(/\\/g, '/')}?t=${timestamp}`;
+        setWorkspacePdfUrls(prev => new Map(prev).set(activeWorkspace.id, newUrl));
+      }
+    } catch (error: any) {
+      console.error('Error generating PDF:', error);
+      setLogs(prev => prev + `\n\n✗ Error: ${error.message}\n`);
     }
   };
 
@@ -344,8 +414,8 @@ function App() {
                 Downloading... {Math.round(downloadProgress)}%
               </div>
             ) : (
-              <button 
-                className="btn btn-primary" 
+              <button
+                className="btn btn-primary"
                 onClick={handleDownloadUpdate}
               >
                 Download Update
@@ -354,7 +424,7 @@ function App() {
           </div>
         </div>
       )}
-      
+
       {/* Update Downloaded Banner */}
       {updateDownloaded && (
         <div className="update-banner update-ready">
@@ -362,8 +432,8 @@ function App() {
             ✓ Update downloaded and ready to install!
           </div>
           <div className="update-actions">
-            <button 
-              className="btn btn-success" 
+            <button
+              className="btn btn-success"
               onClick={handleInstallUpdate}
             >
               Install and Restart
@@ -393,7 +463,7 @@ function App() {
               </button>
             </div>
           ))}
-          <button 
+          <button
             className="workspace-tab-new"
             onClick={() => setShowWorkspaceForm(true)}
             title="New PDF Workspace"
@@ -402,7 +472,7 @@ function App() {
           </button>
         </div>
       )}
-      
+
       {/* Main Content */}
       <div className="app-content">
         {/* Left Panel */}
@@ -410,7 +480,7 @@ function App() {
           {workspaces.length === 0 && !showWorkspaceForm ? (
             // Initial state - no workspaces
             <div className="no-workspace-state">
-              <button 
+              <button
                 className="btn btn-primary btn-large"
                 onClick={() => setShowWorkspaceForm(true)}
               >
@@ -421,14 +491,14 @@ function App() {
             // Workspace creation form
             <div className="workspace-form">
               <h2>Create PDF Workspace</h2>
-              
+
               <div className="form-group">
                 <label>Folder Location:</label>
                 <div className="folder-input-group">
-                  <input 
-                    type="text" 
-                    value={workspaceFolder} 
-                    readOnly 
+                  <input
+                    type="text"
+                    value={workspaceFolder}
+                    readOnly
                     placeholder="Select where to create workspace..."
                   />
                   <button onClick={handleBrowseFolder}>Browse...</button>
@@ -437,8 +507,8 @@ function App() {
 
               <div className="form-group">
                 <label>Workspace Name:</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={workspaceName}
                   onChange={(e) => setWorkspaceName(e.target.value)}
                   placeholder="Enter workspace name..."
@@ -446,7 +516,7 @@ function App() {
               </div>
 
               <div className="form-actions">
-                <button 
+                <button
                   className="btn btn-primary"
                   onClick={handleCreateWorkspace}
                   disabled={!workspaceFolder || !workspaceName.trim()}
@@ -454,7 +524,7 @@ function App() {
                   Create PDF Workspace
                 </button>
                 {workspaces.length > 0 && (
-                  <button 
+                  <button
                     className="btn btn-secondary"
                     onClick={() => {
                       setShowWorkspaceForm(false);
@@ -467,249 +537,271 @@ function App() {
                 )}
               </div>
             </div>
-          ) : activeWorkspace ? (
-            // Active workspace view
-            <>
-              {/* Toolbar */}
-              <div className="workspace-toolbar">
-                <div className="toolbar-group">
-                  <label>XML file:</label>
-                  <select 
-                    value={selectedXmlFile} 
-                    onChange={(e) => setSelectedXmlFile(e.target.value)}
-                  >
-                    <option value="">Select XML file...</option>
-                    {workspaceFiles.xml.map(file => (
-                      <option key={file} value={file}>{file.replace('xml/', '')}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="toolbar-group">
-                  <label>XSL file:</label>
-                  <select 
-                    value={selectedXslFile} 
-                    onChange={(e) => setSelectedXslFile(e.target.value)}
-                  >
-                    <option value="">Select XSL file...</option>
-                    {workspaceFiles.xsl.map(file => (
-                      <option key={file} value={file}>{file.replace('xsl/', '')}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="toolbar-group">
-                  <label className="checkbox-label">
-                    <input 
-                      type="checkbox" 
-                      checked={autoGenerate} 
-                      onChange={(e) => setAutoGenerate(e.target.checked)} 
-                    />
-                    Auto-generate
-                  </label>
-                </div>
-
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => console.log('Generate PDF:', selectedXmlFile, selectedXslFile)}
-                  disabled={!selectedXmlFile || !selectedXslFile}
-                >
-                  Generate PDF
-                </button>
-              </div>
-
-              {/* Workspace Layout */}
-              <div className="workspace-layout">
-              {/* Vertical Icon Bar */}
-              <div className="icon-bar">
-                <button 
-                  className={`icon-button ${showFileExplorer && !showSearch ? 'active' : ''}`}
-                  onClick={() => {
-                    setShowFileExplorer(!showFileExplorer);
-                    setShowSearch(false);
+          ) : (
+            // Render all workspaces (only active one visible)
+            workspaces.map(workspace => {
+              const isActive = workspace.id === activeWorkspaceId;
+              return (
+                <div
+                  key={workspace.id}
+                  style={{
+                    display: isActive ? 'contents' : 'none',
+                    gridColumn: '1 / -1',
+                    height: '100%'
                   }}
-                  title="File Explorer"
                 >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                  </svg>
-                </button>
-                <button 
-                  className={`icon-button ${showSearch ? 'active' : ''}`}
-                  onClick={() => {
-                    setShowSearch(!showSearch);
-                    setShowFileExplorer(false);
-                  }}
-                  title="Search"
-                >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8"/>
-                    <path d="m21 21-4.35-4.35"/>
-                  </svg>
-                </button>
-              </div>
-
-              {/* Side Panel (File Explorer or Search) */}
-              {(showFileExplorer || showSearch) && (
-                <div className="side-panel">
-                  {showFileExplorer && (
-                    <div className="file-explorer">
-                      <div className="panel-header">
-                        <h4>EXPLORER</h4>
-                      </div>
-                      <div className="file-tree">
-                        <div className="workspace-name">{activeWorkspace.name}</div>
-                        
-                        {/* XML Folder */}
-                        <div className="file-tree-item folder">
-                          <span className="folder-icon">📁</span> xml
-                        </div>
+                  {/* Toolbar */}
+                  <div className="workspace-toolbar" style={{ display: isActive ? 'flex' : 'none' }}>
+                    <div className="toolbar-group">
+                      <label>XML file:</label>
+                      <select
+                        value={selectedXmlFile}
+                        onChange={(e) => setSelectedXmlFile(e.target.value)}
+                      >
+                        <option value="">Select XML file...</option>
                         {workspaceFiles.xml.map(file => (
-                          <div 
-                            key={file} 
-                            className="file-tree-item file" 
-                            style={{paddingLeft: '28px'}}
-                            onClick={() => handleFileClick(file)}
-                          >
-                            <span className="file-icon">📄</span> {file.replace('xml/', '')}
-                          </div>
+                          <option key={file} value={file}>{file.replace('xml/', '')}</option>
                         ))}
+                      </select>
+                    </div>
 
-                        {/* XSL Folder */}
-                        <div className="file-tree-item folder">
-                          <span className="folder-icon">📁</span> xsl
-                        </div>
+                    <div className="toolbar-group">
+                      <label>XSL file:</label>
+                      <select
+                        value={selectedXslFile}
+                        onChange={(e) => setSelectedXslFile(e.target.value)}
+                      >
+                        <option value="">Select XSL file...</option>
                         {workspaceFiles.xsl.map(file => (
-                          <div 
-                            key={file} 
-                            className="file-tree-item file" 
-                            style={{paddingLeft: '28px'}}
-                            onClick={() => handleFileClick(file)}
-                          >
-                            <span className="file-icon">📄</span> {file.replace('xsl/', '')}
-                          </div>
+                          <option key={file} value={file}>{file.replace('xsl/', '')}</option>
                         ))}
-                      </div>
-                    </div>
-                  )}
-                  {showSearch && (
-                    <div className="search-panel">
-                      <div className="panel-header">
-                        <h4>SEARCH</h4>
-                      </div>
-                      <p className="placeholder-text">Search functionality coming soon...</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Editor Area */}
-              <div className="editor-area">
-                {openFiles.length === 0 ? (
-                  <p className="placeholder-text">No files open. Click a file in the explorer to edit.</p>
-                ) : (
-                  <>
-                    {/* Inner File Tabs */}
-                    <div className="inner-file-tabs">
-                      {openFiles.map((file, index) => (
-                        <div
-                          key={file.path}
-                          className={`inner-tab ${activeFileIndex === index ? 'active' : ''}`}
-                          onClick={() => setActiveFileIndex(index)}
-                        >
-                          <span className="tab-name">
-                            {file.isDirty && <span className="dirty-indicator">● </span>}
-                            {file.name}
-                          </span>
-                          <button
-                            className="tab-close"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCloseFile(index);
-                            }}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                      </select>
                     </div>
 
-                    {/* Monaco Editor */}
-                    {activeFile && (
-                      <div className="editor-container-monaco">
-                        <Editor
-                          height="100%"
-                          language="xml"
-                          theme="vs-dark"
-                          value={activeFile.content}
-                          onChange={handleEditorChange}
-                          onMount={(editor) => {
-                            editorRef.current = editor;
-                          }}
-                          options={{
-                            minimap: { enabled: true },
-                            fontSize: 14,
-                            wordWrap: 'on',
-                            automaticLayout: true,
-                          }}
+                    <div className="toolbar-group">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={autoGenerate}
+                          onChange={(e) => setAutoGenerate(e.target.checked)}
                         />
+                        Auto-generate
+                      </label>
+                    </div>
+
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleGeneratePDF}
+                      disabled={!selectedXmlFile || !selectedXslFile}
+                    >
+                      Generate PDF
+                    </button>
+                  </div>
+
+                  {/* Workspace Layout */}
+                  <div className="workspace-layout" style={{ display: isActive ? 'flex' : 'none' }}>
+                    {/* Vertical Icon Bar */}
+                    <div className="icon-bar">
+                      <button
+                        className={`icon-button ${showFileExplorer && !showSearch ? 'active' : ''}`}
+                        onClick={() => {
+                          setShowFileExplorer(!showFileExplorer);
+                          setShowSearch(false);
+                        }}
+                        title="File Explorer"
+                      >
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                      </button>
+                      <button
+                        className={`icon-button ${showSearch ? 'active' : ''}`}
+                        onClick={() => {
+                          setShowSearch(!showSearch);
+                          setShowFileExplorer(false);
+                        }}
+                        title="Search"
+                      >
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.35-4.35" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Side Panel (File Explorer or Search) */}
+                    {(showFileExplorer || showSearch) && (
+                      <div className="side-panel">
+                        {showFileExplorer && (
+                          <div className="file-explorer">
+                            <div className="panel-header">
+                              <h4>EXPLORER</h4>
+                            </div>
+                            <div className="file-tree">
+                              <div className="workspace-name">{workspace.name}</div>
+
+                              {/* XML Folder */}
+                              <div className="file-tree-item folder">
+                                <span className="folder-icon">📁</span> xml
+                              </div>
+                              {workspaceFiles.xml.map(file => (
+                                <div
+                                  key={file}
+                                  className="file-tree-item file"
+                                  style={{ paddingLeft: '28px' }}
+                                  onClick={() => handleFileClick(file)}
+                                >
+                                  <span className="file-icon">📄</span> {file.replace('xml/', '')}
+                                </div>
+                              ))}
+
+                              {/* XSL Folder */}
+                              <div className="file-tree-item folder">
+                                <span className="folder-icon">📁</span> xsl
+                              </div>
+                              {workspaceFiles.xsl.map(file => (
+                                <div
+                                  key={file}
+                                  className="file-tree-item file"
+                                  style={{ paddingLeft: '28px' }}
+                                  onClick={() => handleFileClick(file)}
+                                >
+                                  <span className="file-icon">📄</span> {file.replace('xsl/', '')}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {showSearch && (
+                          <div className="search-panel">
+                            <div className="panel-header">
+                              <h4>SEARCH</h4>
+                            </div>
+                            <p className="placeholder-text">Search functionality coming soon...</p>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </>
+
+                    {/* Editor Area */}
+                    <div className="editor-area">
+                      {openFiles.length === 0 ? (
+                        <p className="placeholder-text">No files open. Click a file in the explorer to edit.</p>
+                      ) : (
+                        <>
+                          {/* Inner File Tabs */}
+                          <div className="inner-file-tabs">
+                            {openFiles.map((file, index) => (
+                              <div
+                                key={file.path}
+                                className={`inner-tab ${activeFileIndex === index ? 'active' : ''}`}
+                                onClick={() => setActiveFileIndex(index)}
+                              >
+                                <span className="tab-name">
+                                  {file.isDirty && <span className="dirty-indicator">● </span>}
+                                  {file.name}
+                                </span>
+                                <button
+                                  className="tab-close"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCloseFile(index);
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Monaco Editor */}
+                          {activeFile && (
+                            <div className="editor-container-monaco">
+                              <Editor
+                                height="100%"
+                                language="xml"
+                                theme="vs-dark"
+                                value={activeFile.content}
+                                onChange={handleEditorChange}
+                                onMount={(editor) => {
+                                  editorRef.current = editor;
+                                }}
+                                options={{
+                                  minimap: { enabled: true },
+                                  fontSize: 14,
+                                  wordWrap: 'on',
+                                  automaticLayout: true,
+                                }}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Right Panel - Render for each workspace */}
+        {workspaces.map(workspace => {
+          const isActive = workspace.id === activeWorkspaceId;
+          return (
+            <div
+              key={`pdf-panel-${workspace.id}`}
+              className="right-panel"
+              style={{ display: isActive ? 'flex' : 'none' }}
+            >
+              <div className="pdf-viewer">
+                {workspacePdfUrls.get(workspace.id) ? (
+                  <iframe
+                    key={`pdf-${workspace.id}`}
+                    src={workspacePdfUrls.get(workspace.id)}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    title={`PDF Preview - ${workspace.name}`}
+                  />
+                ) : (
+                  <div className="pdf-placeholder">
+                    {logs && logs.includes('✗') ? (
+                      <>
+                        <p>❌ PDF Generation Failed</p>
+                        <p>Check the Output/Errors panel for details</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>No PDF generated yet</p>
+                        <p>Select XML and XSL files, then click Generate PDF</p>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
-            </>
-          ) : null}
-        </div>
-      
-      {/* Right Panel */}
-      <div className="right-panel">
-        <div className="pdf-viewer">
-          {pdfUrl ? (
-            <iframe 
-              src={pdfUrl} 
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              title="PDF Preview"
-            />
-          ) : (
-            <div className="pdf-placeholder">
-              {logs && logs.includes('✗') ? (
-                <>
-                  <p>❌ PDF Generation Failed</p>
-                  <p>Check the Output/Errors panel for details</p>
-                </>
-              ) : (
-                <>
-                  <p>No PDF generated yet</p>
-                  <p>Select XML and XSL files, then click Generate PDF</p>
-                </>
-              )}
+          );
+        })}
+
+        {/* Bottom Panel */}
+        {showLogs && (
+          <div className="bottom-panel">
+            <div className="logs-header">
+              <h3>Output / Errors</h3>
+              <div className="logs-actions">
+                <button onClick={() => setLogs('')}>Clear</button>
+                <button onClick={() => setShowLogs(false)}>Hide</button>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Bottom Panel */}
-      {showLogs && (
-        <div className="bottom-panel">
-          <div className="logs-header">
-            <h3>Output / Errors</h3>
-            <div className="logs-actions">
-              <button onClick={() => setLogs('')}>Clear</button>
-              <button onClick={() => setShowLogs(false)}>Hide</button>
-            </div>
+            <pre className="logs-content">{logs || 'No output yet...'}</pre>
           </div>
-          <pre className="logs-content">{logs || 'No output yet...'}</pre>
-        </div>
-      )}
-      
-      {/* Logs Toggle Button */}
-      {!showLogs && (
-        <button className="logs-toggle" onClick={() => setShowLogs(true)}>
-          Show Output / Errors
-        </button>
-      )}
+        )}
+
+        {/* Logs Toggle Button */}
+        {!showLogs && (
+          <button className="logs-toggle" onClick={() => setShowLogs(true)}>
+            Show Output / Errors
+          </button>
+        )}
       </div>
     </div>
   )
