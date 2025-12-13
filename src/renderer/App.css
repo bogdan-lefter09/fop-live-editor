@@ -102,7 +102,7 @@ body, html {
 
 .app-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 2fr 1fr;
   grid-template-rows: 1fr auto;
   flex: 1;
   gap: 8px;
@@ -342,13 +342,88 @@ body, html {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 20px;
+  padding: 0;
 }
 
 .placeholder-text {
   color: #6c6c6c !important;
   font-style: italic;
-  margin-top: 20px !important;
+  margin: 20px !important;
+  padding: 20px;
+}
+
+/* Inner File Tabs (within workspace) */
+.inner-file-tabs {
+  display: flex;
+  background: #252526;
+  border-bottom: 1px solid #3e3e42;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.inner-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #2d2d30;
+  border-right: 1px solid #3e3e42;
+  cursor: pointer;
+  color: #cccccc;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.2s;
+  min-width: 120px;
+  max-width: 200px;
+}
+
+.inner-tab:hover {
+  background: #37373d;
+}
+
+.inner-tab.active {
+  background: #1e1e1e;
+  color: #ffffff;
+  border-bottom: 2px solid #007acc;
+  margin-bottom: -1px;
+}
+
+.tab-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirty-indicator {
+  color: #007acc;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tab-close {
+  background: none;
+  border: none;
+  color: #cccccc;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  color: #ffffff;
+}
+
+/* Monaco Editor Container */
+.editor-container-monaco {
+  flex: 1;
+  overflow: hidden;
+  background: #1e1e1e;
 }
 
 .right-panel {

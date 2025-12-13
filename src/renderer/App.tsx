@@ -1,10 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import Editor from '@monaco-editor/react'
 import './App.css'
 
 interface Workspace {
   id: string;
   name: string;
   path: string;
+}
+
+interface OpenFile {
+  path: string;
+  name: string;
+  content: string;
+  isDirty: boolean;
+  originalContent: string;
 }
 
 function App() {
@@ -28,6 +37,11 @@ function App() {
   const [selectedXmlFile, setSelectedXmlFile] = useState<string>('')
   const [selectedXslFile, setSelectedXslFile] = useState<string>('')
   const [autoGenerate, setAutoGenerate] = useState<boolean>(false)
+  
+  // Editor state for open files
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
+  const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
+  const editorRef = useRef<any>(null)
   
   // State for PDF preview
   const [pdfUrl, setPdfUrl] = useState<string>('')
@@ -188,9 +202,14 @@ function App() {
       // Reset toolbar selections when switching workspace
       setSelectedXmlFile('');
       setSelectedXslFile('');
+      // Clear open files when switching workspace
+      setOpenFiles([]);
+      setActiveFileIndex(-1);
     } else {
       // Clear files when no workspace is active
       setWorkspaceFiles({ xml: [], xsl: [] });
+      setOpenFiles([]);
+      setActiveFileIndex(-1);
     }
   }, [activeWorkspace]);
 
@@ -202,6 +221,114 @@ function App() {
       console.error('Error loading workspace files:', error);
     }
   };
+
+  const handleFileClick = async (filePath: string) => {
+    if (!activeWorkspace) return;
+
+    const fullPath = `${activeWorkspace.path}\\${filePath}`;
+    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+
+    // Check if file is already open
+    const existingIndex = openFiles.findIndex(f => f.path === fullPath);
+    if (existingIndex !== -1) {
+      setActiveFileIndex(existingIndex);
+      return;
+    }
+
+    // Load file content
+    try {
+      const content = await window.electronAPI.readFile(fullPath);
+      const newFile: OpenFile = {
+        path: fullPath,
+        name: fileName,
+        content: content,
+        isDirty: false,
+        originalContent: content
+      };
+
+      setOpenFiles([...openFiles, newFile]);
+      setActiveFileIndex(openFiles.length);
+    } catch (error) {
+      console.error('Error loading file:', error);
+      alert(`Failed to load file: ${error}`);
+    }
+  };
+
+  const handleCloseFile = (index: number) => {
+    const file = openFiles[index];
+    
+    // Check if file has unsaved changes
+    if (file.isDirty) {
+      const confirmClose = confirm(`${file.name} has unsaved changes. Close anyway?`);
+      if (!confirmClose) return;
+    }
+
+    const newOpenFiles = openFiles.filter((_, i) => i !== index);
+    setOpenFiles(newOpenFiles);
+
+    // Adjust active file index
+    if (activeFileIndex === index) {
+      // If closing active file, switch to previous or next
+      if (newOpenFiles.length === 0) {
+        setActiveFileIndex(-1);
+      } else if (index >= newOpenFiles.length) {
+        setActiveFileIndex(newOpenFiles.length - 1);
+      } else {
+        setActiveFileIndex(index);
+      }
+    } else if (activeFileIndex > index) {
+      setActiveFileIndex(activeFileIndex - 1);
+    }
+  };
+
+  const handleEditorChange = (value: string | undefined) => {
+    if (activeFileIndex === -1 || !value) return;
+
+    const updatedFiles = [...openFiles];
+    updatedFiles[activeFileIndex] = {
+      ...updatedFiles[activeFileIndex],
+      content: value,
+      isDirty: value !== updatedFiles[activeFileIndex].originalContent
+    };
+    setOpenFiles(updatedFiles);
+  };
+
+  const handleSaveFile = async () => {
+    if (activeFileIndex === -1) return;
+
+    const file = openFiles[activeFileIndex];
+    try {
+      await window.electronAPI.saveFile(file.path, file.content);
+      
+      // Update file state
+      const updatedFiles = [...openFiles];
+      updatedFiles[activeFileIndex] = {
+        ...file,
+        isDirty: false,
+        originalContent: file.content
+      };
+      setOpenFiles(updatedFiles);
+    } catch (error) {
+      console.error('Error saving file:', error);
+      alert(`Failed to save file: ${error}`);
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSaveFile();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeFileIndex, openFiles]);
+
+  const activeFile = activeFileIndex >= 0 ? openFiles[activeFileIndex] : null;
 
   return (
     <div className="app-container">
@@ -438,7 +565,12 @@ function App() {
                           <span className="folder-icon">📁</span> xml
                         </div>
                         {workspaceFiles.xml.map(file => (
-                          <div key={file} className="file-tree-item file" style={{paddingLeft: '28px'}}>
+                          <div 
+                            key={file} 
+                            className="file-tree-item file" 
+                            style={{paddingLeft: '28px'}}
+                            onClick={() => handleFileClick(file)}
+                          >
                             <span className="file-icon">📄</span> {file.replace('xml/', '')}
                           </div>
                         ))}
@@ -448,7 +580,12 @@ function App() {
                           <span className="folder-icon">📁</span> xsl
                         </div>
                         {workspaceFiles.xsl.map(file => (
-                          <div key={file} className="file-tree-item file" style={{paddingLeft: '28px'}}>
+                          <div 
+                            key={file} 
+                            className="file-tree-item file" 
+                            style={{paddingLeft: '28px'}}
+                            onClick={() => handleFileClick(file)}
+                          >
                             <span className="file-icon">📄</span> {file.replace('xsl/', '')}
                           </div>
                         ))}
@@ -468,7 +605,58 @@ function App() {
 
               {/* Editor Area */}
               <div className="editor-area">
-                <p className="placeholder-text">Editor area - file tabs and Monaco editor will go here</p>
+                {openFiles.length === 0 ? (
+                  <p className="placeholder-text">No files open. Click a file in the explorer to edit.</p>
+                ) : (
+                  <>
+                    {/* Inner File Tabs */}
+                    <div className="inner-file-tabs">
+                      {openFiles.map((file, index) => (
+                        <div
+                          key={file.path}
+                          className={`inner-tab ${activeFileIndex === index ? 'active' : ''}`}
+                          onClick={() => setActiveFileIndex(index)}
+                        >
+                          <span className="tab-name">
+                            {file.isDirty && <span className="dirty-indicator">● </span>}
+                            {file.name}
+                          </span>
+                          <button
+                            className="tab-close"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCloseFile(index);
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Monaco Editor */}
+                    {activeFile && (
+                      <div className="editor-container-monaco">
+                        <Editor
+                          height="100%"
+                          language="xml"
+                          theme="vs-dark"
+                          value={activeFile.content}
+                          onChange={handleEditorChange}
+                          onMount={(editor) => {
+                            editorRef.current = editor;
+                          }}
+                          options={{
+                            minimap: { enabled: true },
+                            fontSize: 14,
+                            wordWrap: 'on',
+                            automaticLayout: true,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
             </>

@@ -43,6 +43,7 @@
     "@codemirror/lang-xml": "^6.0.2",
     "@codemirror/state": "^6.4.0",
     "@codemirror/view": "^6.23.0",
+    "@monaco-editor/react": "^4.7.0",
     "@uiw/react-codemirror": "^4.21.21",
     "chokidar": "^3.5.3",
     "electron-store": "^8.1.0",
