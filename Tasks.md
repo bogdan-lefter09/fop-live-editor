@@ -2,7 +2,7 @@ Great — thanks for the clear constraints. Below is a focused, actionable step-
 
 High-level architecture (one sentence)
 
-Electron app with a React+Vite renderer (UI) and an Electron main process that manages a persistent FOP server; editor is CodeMirror; PDF preview streams via file:// protocol; settings persisted to disk; watch-save -> debounced request to persistent server -> render PDF.
+Electron app with a React+Vite renderer (UI) and an Electron main process that manages a persistent FOP server; editor is Monaco (VS Code editor); multi-workspace tab system with file explorer; PDF preview streams via file:// protocol; workspace settings persisted in `.fop-editor-workspace.json`; watch-save -> debounced request to persistent server -> render PDF.
 
 ## ✅ Completed Optimizations & Features
 
@@ -22,6 +22,9 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 - **Collapsible Log Panel**: Hide/show output console to maximize screen space
 - **Error Handling**: Clear error messages when PDF generation fails
 - **Background Throttling**: Reduced memory usage when app is minimized
+- **Workspace System**: Multi-workspace tab support with `.fop-editor-workspace.json` configuration
+- **VS Code-style Interface**: Vertical icon bar with file explorer and search functionality
+- **Monaco Editor Integration**: VS Code editor component for XML/XSL editing
 
 Phases & step-by-step tasks
 
@@ -43,46 +46,162 @@ electron-builder for packaging
 electronmon / concurrently or a small script to spawn electron while Vite serves
 Optionally use community tools like electron-vite if you want automation.
 Install core npm dependencies:
-runtime: electron (dev), pdfjs-dist, codemirror (v6), chokidar, electron-store (or write simple JSON), cross-spawn (optional).
+runtime: electron (dev), pdfjs-dist, @monaco-editor/react, chokidar, electron-store (or write simple JSON), cross-spawn (optional).
 dev: electron-builder, concurrently (optional).
 Project directory layout suggestion:
 src/
-main/ (Electron main process code: spawn FOP, watchers, IPC handlers)
-renderer/ (React + Vite app, CodeMirror component, PDF viewer)
+main/ (Electron main process code: spawn FOP, watchers, IPC handlers, workspace management)
+renderer/ (React + Vite app, Monaco editor component, PDF viewer, workspace UI)
 assets/bundled/
 jre/ (bundled Windows JRE folder)
 fop/ (bundled FOP distribution: fop.jar + lib)
-user-data/ or use Electron app.getPath('userData') for settings/output at runtime
+examples/ (sample XML and XSL files for dev mode)
+xml/ (sample XML files)
+xsl/ (sample XSL files)
+user-data/ or use Electron app.getPath('userData') for workspace settings/output at runtime
 Phase 2 — Main responsibilities & IPC
 
 Main process responsibilities:
-Manage settings (paths to bundled resources vs user-specified).
-Start/stop file watchers (chokidar) for selected XML & XSL directories.
-Receive "generate" requests from renderer via IPC.
+Manage global settings (paths to bundled resources vs user-specified).
+Create and manage workspaces (create folders, `.fop-editor-workspace.json` files).
+Start/stop file watchers (chokidar) per workspace for XML & XSL directories.
+Receive "generate" requests from renderer via IPC for specific workspaces.
 Spawn the bundled JRE to run FOP, capture stdout/stderr, manage process lifecycle (kill previous job if new request comes).
 Read generated PDF file and send binary to renderer (via IPC or serve from temp path).
+Recursively scan XML/ and XSL/ folders to populate toolbar comboboxes.
 Renderer responsibilities:
-UI for selecting folders (XML folder, XSL folder) and file comboboxes.
-CodeMirror editor for editing selected file(s).
-Buttons: Generate, Toggle Auto-generate, Save.
+Workspace tab management (create, switch, close workspaces).
+Initial "New PDF Workspace" button state when no workspaces are open.
+Workspace creation form (folder selection, workspace name input, create button).
+Vertical icon bar (file explorer toggle, search).
+File explorer panel showing workspace folder tree.
+Toolbar with XML/XSL file comboboxes and auto-generate toggle.
+Monaco editor for editing selected file(s) with multi-file tab support within each workspace.
 PDF preview area (PDF.js).
 Errors/Logs panel that displays FOP stderr/stdout text.
 IPC channels to define (examples):
-renderer -> main: select-folder, set-setting, generate-now, save-file-content
-main -> renderer: generation-started, generation-progress (stdout/stderr), generation-finished (with PDF binary or path), error
-Phase 3 — Editor + UI details
+renderer -> main: create-workspace, open-workspace, close-workspace, browse-folder, scan-workspace-files, read-file, save-file, generate-pdf, delete-file, rename-file
+main -> renderer: workspace-created, workspace-opened, files-scanned, generation-started, generation-progress (stdout/stderr), generation-finished (with PDF binary or path), error
+Phase 3 — Workspace & UI Architecture
 
-Use CodeMirror v6 in a React component for XML/XSL editing (XML mode handles both).
-UI panes:
-Left: file selectors, comboboxes, editor tab(s), Save button, controls
-Right: PDF preview (PDF.js) + basic controls (page up/down, zoom)
-Bottom: Errors / log panel
-Behavior:
-User selects XML folder -> combobox populated with .xml files.
-User selects XSL folder -> combobox populated with .xsl/.xslt files (the XSL folder becomes base cwd for FOP).
-When a file is selected, load from disk into editor.
-Save button writes the editor contents to disk (file path user selected).
-Auto-generate watch mode: when Save occurs, main’s watcher triggers debounced generate.
+## Initial State (No Workspaces Open)
+UI shows:
+- Left side: Single button "New PDF Workspace"
+- Empty workspace area
+- Menu bar: File -> "New PDF Workspace" option
+
+## Workspace Creation Flow
+When "New PDF Workspace" is clicked:
+1. Form appears with:
+   - Folder location (text input + Browse button) - where workspace will be created
+   - Workspace name input (used for both folder name and default PDF output name)
+   - "Create PDF Workspace" button
+2. On create:
+   - Main process creates folder: `{selectedFolder}\{workspaceName}\`
+   - Creates `.fop-editor-workspace.json` with: `{"workspaceName": "..."}`
+   - Creates subfolders: `{workspaceName}\xml\` and `{workspaceName}\xsl\`
+   - If dev mode: copies files from `examples/xml/` -> workspace `xml/`, `examples/xsl/` -> workspace `xsl/`
+   - Opens workspace in new tab
+
+## Workspace Tab System
+- Top-level tabs: Each tab represents one workspace
+- Prevent duplicate: Cannot open same workspace twice in same session
+- Close behavior: When all workspace tabs closed, return to "New PDF Workspace" button state
+- File menu integration: File -> "New PDF Workspace" creates new workspace tab
+
+## Active Workspace UI Layout (Multi-Level Tabs)
+Structure: Workspace Tab (outer) contains File Tabs (inner) for opened files
+
+**Vertical Icon Bar (leftmost, ~48px wide):**
+- File Explorer icon button (toggles file explorer panel)
+- Search icon button (toggles search panel)
+
+**File Explorer Panel (left side, toggleable, ~250-300px):**
+- Shows workspace folder tree
+- Displays XML/ and XSL/ subfolders with files
+- Click file -> opens in editor (creates inner file tab)
+- Recursive folder display
+
+**Toolbar (below menu bar, spans horizontally):**
+- "XML file:" label + combobox (populated with recursive scan of XML/ folder)
+- "XSL file:" label + combobox (populated with recursive scan of XSL/ folder)
+- Auto-generate toggle checkbox
+- Generate PDF button
+
+**Editor Area (center-left, horizontal split with PDF viewer):**
+- Inner file tabs: Each opened file from file explorer gets its own tab within the workspace
+- Monaco editor (@monaco-editor/react) for XML/XSL editing
+- Ctrl+S saves current file
+- Dirty indicator (dot) on unsaved file tabs
+
+**PDF Preview (right side, 50% width):**
+- PDF.js viewer
+- Basic controls (page up/down, zoom)
+- Shows output named: `{workspaceName}.pdf`
+
+**Bottom Panel (collapsible):**
+- Errors/Logs console (FOP stdout/stderr)
+
+## Behavior
+1. User creates workspace -> toolbar comboboxes populated with files from XML/ and XSL/ folders
+2. User clicks file in explorer -> file opens in editor (inner file tab created)
+3. User selects main XML from toolbar combobox -> sets XML file for PDF generation
+4. User selects main XSL from toolbar combobox -> sets XSL file for PDF generation (XSL folder becomes cwd for FOP)
+5. Auto-generate enabled: Save triggers debounced PDF generation
+6. Generate button: Manual PDF generation with selected XML/XSL
+7. Output PDF: Named `{workspaceName}.pdf` by default
+
+## UI Implementation Order (by Difficulty & Dependencies)
+
+### Phase 1: Foundation (Easiest)
+1. **Basic workspace tab system shell** - Create top-level tabs component that can hold multiple workspaces (no functionality yet, just the UI container)
+2. **Initial "New PDF Workspace" button state** - Display button when no workspaces are open
+3. **Workspace creation form** - Build the form with folder browse, name input, and create button
+4. **Menu bar integration** - Add File → "New PDF Workspace" menu item
+
+### Phase 2: Core Workspace (Easy-Medium)
+5. **Workspace folder creation (IPC)** - Main process handlers to create workspace folder structure (folder + XML/ + XSL/ + .fop-editor-workspace.json)
+6. **Dev mode file copying** - Copy example files from `examples/` to new workspace in dev mode
+7. **Workspace tab open/close** - Open workspace in new tab after creation, close tab functionality
+8. **Prevent duplicate workspaces** - Track open workspaces and prevent opening same workspace twice
+
+### Phase 3: File System UI (Medium)
+9. **Vertical icon bar** - Create ~48px left bar with file explorer and search icons (buttons only, no functionality)
+10. **File explorer panel toggle** - Show/hide file explorer panel when icon clicked
+11. **Basic file tree component** - Display workspace folder structure (use library like `react-arborist` or build simple recursive tree)
+12. **Recursive file scanning (IPC)** - Main process handlers to scan XML/ and XSL/ folders recursively
+13. **Toolbar with comboboxes** - Create toolbar below menu bar with XML/XSL file dropdowns
+
+### Phase 4: Editor Integration (Medium-Hard)
+14. **Monaco editor integration** - Add `@monaco-editor/react` component to editor area
+15. **File opening from explorer** - Click file in tree → load content → display in Monaco editor
+16. **Inner file tabs system** - Create tabs within workspace for opened files
+17. **File content loading (IPC)** - Read file from disk and load into editor
+18. **Dirty indicators** - Show dot on tab when file has unsaved changes
+19. **File save (Ctrl+S)** - Save current file content back to disk
+
+### Phase 5: PDF Generation (Medium-Hard)
+20. **Toolbar main file selection** - Connect comboboxes to workspace settings (selectedXmlFile, selectedXslFile)
+21. **Auto-generate toggle** - Checkbox in toolbar that persists to workspace settings
+22. **Generate PDF button** - Manual trigger for PDF generation
+23. **PDF generation with workspace context** - Use selected XML/XSL from toolbar comboboxes
+24. **PDF viewer integration** - Display generated `{workspaceName}.pdf` in right panel
+
+### Phase 6: Advanced Features (Hard)
+25. **Workspace settings persistence** - Save/load .fop-editor-workspace.json (selected files, open files, auto-generate state)
+26. **Multi-workspace state management** - Each workspace tab maintains independent state (selected files, open editor tabs, etc.)
+27. **Restore workspaces on startup** - Load lastOpenedWorkspaces from global settings
+28. **File watcher per workspace** - Debounced auto-generate when files change and auto-generate is enabled
+29. **Search panel** - Implement search functionality (initially can be placeholder)
+30. **Recent workspaces list** - Settings screen with clickable recent workspace list
+
+### Critical Path (Minimum Viable Implementation)
+For rapid prototyping, follow this subset: **1 → 2 → 3 → 5 → 6 → 7 → 14 → 15 → 17 → 19 → 20 → 22 → 24**
+
+This gives you: workspace creation → Monaco editor → file editing → PDF generation.
+
+**Implementation Strategy:** Start with Phase 1-2 (foundational structure), then implement Phase 4 (editor) before Phase 3 (file tree), because you can hardcode file paths for testing initially. File tree is more UI work but less critical for core functionality.
+
 Phase 4 — FOP invocation (Windows specifics)
 
 Recommended invocation (use bundled JRE java binary; avoids platform script behavior):
@@ -108,19 +227,39 @@ Phase 6 — PDF preview (PDF.js)
 Use pdfjs-dist in renderer to render the PDF Blob received via IPC.
 Provide pagination and zoom controls, basic toolbar.
 Re-render when new PDF buffer arrives.
-Phase 7 — Settings & user overrides
+Phase 7 — Settings & Workspace Configuration
 
-Default config (persisted in app.getPath('userData') settings.json):
-useBundledJRE: true
-bundledJREPath: <relative path inside app resources, e.g., resources/bundled/jre>
-bundledFopPath: resources/bundled/fop/fop.jar
-customJREPath: null
-customFopPath: null
-lastXmlFolder, lastXslFolder
-UI settings screen:
-Toggle to use bundled or custom JRE/FOP
-Buttons to browse and choose custom JRE home or custom FOP folder (validate by running java -version or java -jar fop.jar --version)
-On startup, if bundled JRE/FOP exist, use them by default.
+## Global Settings (persisted in app.getPath('userData') settings.json):
+```json
+{
+  "useBundledJRE": true,
+  "bundledJREPath": "resources/bundled/jre",
+  "bundledFopPath": "resources/bundled/fop/fop.jar",
+  "customJREPath": null,
+  "customFopPath": null,
+  "recentWorkspaces": ["C:\\path\\to\\workspace1", "C:\\path\\to\\workspace2"],
+  "lastOpenedWorkspaces": ["C:\\path\\to\\workspace1"]
+}
+```
+
+## Workspace Settings (per workspace, `.fop-editor-workspace.json`):
+Located at: `{workspaceFolder}\.fop-editor-workspace.json`
+```json
+{
+  "workspaceName": "MyInvoicePDF",
+  "selectedXmlFile": "xml/invoice.xml",
+  "selectedXslFile": "xsl/invoice.xsl",
+  "autoGenerate": true,
+  "openFiles": ["xml/invoice.xml", "xsl/invoice.xsl", "xsl/common-layout.xsl"]
+}
+```
+
+## UI Settings Screen:
+- Toggle to use bundled or custom JRE/FOP
+- Browse buttons to choose custom JRE home or FOP folder
+- Validate by running `java -version` or `java -jar fop.jar --version`
+- Recent workspaces list (click to reopen)
+- On startup: if bundled JRE/FOP exist, use them by default; restore last opened workspaces
 Phase 8 — Dev workflow
 
 Development commands:
@@ -177,25 +316,41 @@ Use HTTPS for update server
 Phase 11 — Testing & QA (manual testing only)
 
 Manual testing checklist:
-Select XML and XSL folders, edit XML/XSL, Save -> PDF generated -> Preview updated.
-XSL with xsl:include uses relative includes and works.
-Long path names and spaces work (paths properly quoted).
-Kill and restart generation while a generation is in progress — no orphan processes remain.
-Edge cases:
-Large output PDFs render and do not block UI.
-Windows-specific checks:
-App runs on Windows 10/11, installer works.
+- Create new workspace -> verify folder structure (XML/, XSL/, .fop-editor-workspace.json)
+- Dev mode: verify example files copied to workspace
+- Open multiple workspaces -> verify each workspace tab is independent
+- Prevent duplicate workspace opening -> try opening same workspace twice
+- Close all workspace tabs -> verify "New PDF Workspace" button returns
+- File explorer: click files -> verify they open in editor with inner tabs
+- Toolbar comboboxes: verify recursive file scanning from XML/ and XSL/ folders
+- Select main XML/XSL from toolbar -> edit files -> Save -> PDF generated -> Preview updated
+- Multi-file editing: open multiple files -> switch between inner tabs -> verify content preserved
+- XSL with xsl:include uses relative includes and works
+- Long path names and spaces work (paths properly quoted)
+- Kill and restart generation while a generation is in progress -> no orphan processes remain
+- Edge cases: Large output PDFs render and do not block UI
+- Windows-specific checks: App runs on Windows 10/11, installer works
+- Workspace persistence: close and reopen app -> verify last workspaces restored
 Note: Formal automated testing not implemented - manual testing used for validation.
-MVP (minimum you should implement for v1)
+MVP (minimum you should implement for v2 with workspace system)
 
-Electron app shell + React + Vite setup.
-File selectors (XML folder, XSL folder) + combobox that lists files.
-CodeMirror editor in React for editing selected file; Save writes file.
-Main process spawn logic to run bundled java -jar fop.jar with cwd set to XSL folder and args -xml, -xsl, -pdf.
-Debounced watcher (chokidar) that triggers generation on Save.
-PDF preview using pdfjs-dist, loading PDF buffer sent by main via IPC.
-Settings screen for switching to custom JRE/FOP paths (optional for MVP if time-constrained).
-Packaging setup with electron-builder including extraResources to bundle jre and fop.
+1. Electron app shell + React + Vite setup
+2. Initial state: "New PDF Workspace" button
+3. Workspace creation form (folder browse, name input, create button)
+4. Workspace folder creation with XML/ and XSL/ subfolders + `.fop-editor-workspace.json`
+5. Dev mode: copy example files from `examples/` to new workspace
+6. Workspace tab system (open, switch, close, prevent duplicates)
+7. Vertical icon bar (file explorer toggle, search placeholder)
+8. File explorer panel showing workspace folder tree
+9. Toolbar with XML/XSL comboboxes (recursive file scanning) + auto-generate toggle
+10. Monaco editor (@monaco-editor/react) for XML/XSL editing
+11. Inner file tabs (multi-file editing within workspace)
+12. Main process spawn logic to run bundled java -jar fop.jar with cwd set to XSL folder
+13. Debounced watcher (chokidar) that triggers generation on Save when auto-generate enabled
+14. PDF preview using pdfjs-dist, output named `{workspaceName}.pdf`
+15. Settings persistence (global + per-workspace)
+16. Recent workspaces list and restore on startup (optional for MVP)
+17. Packaging setup with electron-builder including extraResources to bundle jre and fop
 Concrete runtime command example (for your spawn call)
 
 Example args array (pseudocode, not source file):
