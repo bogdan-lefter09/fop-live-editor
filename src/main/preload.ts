@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scanWorkspaceFiles: (workspacePath: string) => ipcRenderer.invoke('scan-workspace-files', workspacePath),
   loadWorkspaceSettings: (workspacePath: string) => ipcRenderer.invoke('load-workspace-settings', workspacePath),
   saveWorkspaceSettings: (workspacePath: string, settings: any) => ipcRenderer.invoke('save-workspace-settings', workspacePath, settings),
+  createFile: (workspacePath: string, folderName: string, fileName: string) => ipcRenderer.invoke('create-file', workspacePath, folderName, fileName),
+  renameFile: (workspacePath: string, oldRelativePath: string, newFileName: string) => ipcRenderer.invoke('rename-file', workspacePath, oldRelativePath, newFileName),
+  deleteFile: (workspacePath: string, filePath: string) => ipcRenderer.invoke('delete-file', workspacePath, filePath),
   generatePdf: (xmlPath: string, xslPath: string, xslFolder: string) => ipcRenderer.invoke('generate-pdf', xmlPath, xslPath, xslFolder),
   onGenerationLog: (callback: (log: string) => void) => {
     ipcRenderer.on('generation-log', (_event, log) => callback(log));

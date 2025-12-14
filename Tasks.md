@@ -304,6 +304,230 @@ Phase 7a — Open Existing Folder as Workspace
 - Opening workspaces from other machines or shared drives
 - Opening legacy project folders that follow the xml/xsl structure
 
+Phase 7b — File Creation via Context Menu
+
+**Feature:** Allow users to create new files within workspace folders using a context menu (right-click), similar to VS Code.
+
+**Behavior:**
+1. Right-click on a folder in the file explorer
+2. Context menu appears with options:
+   - "New File" - Create a new file in the selected folder
+   - (Future: "New Folder", "Rename", "Delete")
+3. New File flow:
+   - Show input dialog/inline editor to enter filename
+   - Validate filename (no special characters, check if file already exists)
+   - Create empty file in the selected folder
+   - Automatically open the new file in the editor
+   - Add file to workspace file list and refresh explorer
+4. File naming:
+   - Support both .xml and .xsl/.xslt extensions
+   - Suggest extension based on parent folder (xml/ -> .xml, xsl/ -> .xsl)
+   - Show error if file already exists
+   - Prevent invalid characters in filename
+
+**UI/UX:**
+- Context menu appears at cursor position on right-click
+- Input field appears inline in the file tree OR as a modal dialog
+- Escape key cancels creation
+- Enter key confirms creation
+- Loading indicator while file is being created
+- Auto-scroll to newly created file in explorer
+
+**Implementation:**
+- Add context menu component to FileExplorer
+- Add IPC handler: `create-file` (folderPath, fileName)
+- Main process creates empty file with fs.writeFileSync
+- Return success/error to renderer
+- Refresh workspace files list after creation
+- Auto-open new file in editor
+
+**Technical Details:**
+- Use React context menu library (e.g., react-contexify) or build custom
+- Validate file paths to ensure they're within workspace
+- Handle file system errors (permissions, disk full, etc.)
+- Update workspace file watcher to detect new file
+- Ensure new file appears in toolbar comboboxes if in xml/xsl folder
+
+**Future Enhancements:**
+- New Folder creation
+- File/folder delete with confirmation
+- Copy/paste files
+- Drag-and-drop file organization
+
+Phase 7c — File Renaming via Context Menu
+
+**Feature:** Allow users to rename files within workspace folders using a context menu (right-click on file), similar to VS Code.
+
+**Behavior:**
+1. Right-click on a file in the file explorer
+2. Context menu appears with options:
+   - "Rename" - Rename the selected file
+   - (Other options: "Delete", "Copy", etc.)
+3. Rename flow:
+   - Input field appears inline in the file tree, replacing the file name
+   - Current filename is pre-filled and fully selected
+   - User edits the filename
+   - Validate filename (no special characters, check if new name already exists, must keep same extension)
+   - Rename file on disk and update all references
+4. File naming validation:
+   - Cannot rename to empty string
+   - Cannot rename to existing file name
+   - Should preserve file extension (or warn if changing)
+   - Prevent invalid characters in filename
+   - Show error if validation fails
+
+**UI/UX:**
+- Context menu appears at cursor position on right-click
+- Input field appears inline, replacing the file name text
+- Current filename is selected, ready for editing
+- Escape key cancels rename
+- Enter key confirms rename
+- Click outside input field confirms rename (with validation)
+- Loading indicator while file is being renamed
+- If file is open in editor, update the tab name
+
+**Implementation:**
+- Extend context menu component in FileExplorer to show "Rename" option for files
+- Add IPC handler: `rename-file` (workspacePath, oldFilePath, newFileName)
+- Main process:
+  - Validate new filename
+  - Check if new filename already exists
+  - Rename file using fs.renameSync
+  - Return success/error to renderer
+- Renderer:
+  - Refresh workspace files list after rename
+  - If file is open in editor: update openFiles array with new path
+  - If file is active in editor: keep it active with new name
+  - If file is selected in toolbar combobox: update selection to new name
+  - Update any file watchers to track renamed file
+
+**Technical Details:**
+- Use same inline input approach as file creation
+- File rename should be atomic (use fs.renameSync)
+- Handle edge cases:
+  - File open in editor → update editor tab and file path
+  - File selected in XML/XSL combobox → update selection
+  - File currently being watched → update watcher
+  - File has unsaved changes → preserve dirty state with new name
+- Validate file paths to ensure they're within workspace
+- Handle file system errors (permissions, file in use, etc.)
+- Update workspace settings if renamed file is in openFiles or selectedXmlFile/selectedXslFile
+
+**Error Handling:**
+- File already exists: "A file with this name already exists"
+- Invalid characters: "Filename contains invalid characters"
+- Empty filename: "Filename cannot be empty"
+- File in use: "Cannot rename file: file is in use by another process"
+- Permission denied: "Cannot rename file: permission denied"
+
+**VS Code-like Behavior:**
+- Click file → select it
+- Right-click → show context menu with "Rename"
+- Click "Rename" → filename becomes editable inline
+- Type new name → press Enter or click outside to confirm
+- If file open in editor → tab name updates immediately
+- Preserve file extension by default
+
+**Future Enhancements:**
+- Rename folder (recursive update of all file paths)
+- Smart extension handling (auto-suggest .xml or .xsl based on folder)
+- Rename with drag-and-drop to different folder (move operation)
+- Undo rename operation
+
+Phase 7d — File Deletion via Context Menu
+
+**Feature:** Allow users to delete files within workspace folders using a context menu (right-click on file), similar to VS Code.
+
+**Behavior:**
+1. Right-click on a file in the file explorer
+2. Context menu appears with options:
+   - "Delete" - Delete the selected file (files only, not folders)
+   - (Other options: "Rename", "Copy", etc.)
+3. Delete flow:
+   - Show confirmation dialog: "Are you sure you want to delete [filename]?"
+   - Dialog buttons: "Delete" (primary/destructive) and "Cancel"
+   - If confirmed: delete file from disk
+   - If file is open in editor: close the tab and remove from openFiles
+   - If file is selected in toolbar: clear selection
+   - Refresh file explorer to remove deleted file from tree
+4. Safety checks:
+   - Only allow deletion of files, not folders (folder deletion requires recursive handling)
+   - Confirmation dialog required (no silent deletion)
+   - Validate file exists before attempting deletion
+   - Cannot delete files outside workspace
+
+**UI/UX:**
+- Context menu appears at cursor position on right-click
+- "Delete" option appears in context menu (only for files, not folders)
+- Confirmation dialog shows filename clearly
+- Delete button styled as destructive action (red/warning color)
+- Cancel button as secondary action
+- Escape key cancels dialog
+- Loading indicator while file is being deleted
+- Show success toast/notification: "File deleted successfully"
+- If file was open in editor: tab closes smoothly (no jarring animation)
+
+**Implementation:**
+- Extend context menu component in FileExplorer to show "Delete" option for files
+- Add confirmation dialog component (reusable for future features)
+- Add IPC handler: `delete-file` (workspacePath, filePath)
+- Main process:
+  - Validate file exists and is within workspace
+  - Check file is not a directory
+  - Delete file using fs.unlinkSync
+  - Return success/error to renderer
+- Renderer:
+  - Show confirmation dialog before IPC call
+  - After successful deletion:
+    - Refresh workspace files list (remove from tree)
+    - If file is in openFiles: remove from array and close tab
+    - If file is active in editor: switch to another tab or empty state
+    - If file is selectedXmlFile or selectedXslFile: clear selection
+    - Update any file watchers to stop tracking deleted file
+    - Show success notification
+
+**Technical Details:**
+- Use fs.unlinkSync for synchronous deletion (atomic operation)
+- Handle edge cases:
+  - File open in editor with unsaved changes → warn in confirmation dialog: "File has unsaved changes. Delete anyway?"
+  - File selected in XML/XSL combobox → clear selection after deletion
+  - File currently being watched → remove from watcher
+  - Multiple tabs open → close deleted file's tab, keep others open
+  - Last open tab deleted → show empty editor state
+- Validate file paths to ensure they're within workspace (security)
+- Handle file system errors (permissions, file in use, etc.)
+- Update workspace settings to remove deleted file from openFiles array
+- Deletion is permanent (no trash/recycle bin support initially)
+
+**Error Handling:**
+- File not found: "File not found: [filename]"
+- File in use: "Cannot delete file: file is in use by another process"
+- Permission denied: "Cannot delete file: permission denied"
+- Path outside workspace: "Cannot delete file: path is outside workspace"
+- Is a directory: "Cannot delete folders (only files can be deleted)"
+- Generic error: "Failed to delete file: [error message]"
+
+**VS Code-like Behavior:**
+- Right-click file → show context menu with "Delete"
+- Click "Delete" → confirmation dialog appears
+- Confirm → file deleted, tab closes if open, tree refreshes
+- No undo initially (future enhancement: move to trash instead of permanent delete)
+
+**Confirmation Dialog Text:**
+- Title: "Delete File"
+- Message: "Are you sure you want to delete '[filename]'?"
+- If unsaved changes: "This file has unsaved changes. Are you sure you want to delete it?"
+- Checkbox (optional): "Don't ask me again" (store in settings)
+
+**Future Enhancements:**
+- Move to recycle bin/trash instead of permanent deletion (safer)
+- Undo delete operation (restore from trash)
+- Folder deletion (recursive with confirmation showing file count)
+- Multi-select deletion (delete multiple files at once)
+- Settings option: "Confirm file deletion" toggle
+- Delete keyboard shortcut (Delete key when file selected)
+- Drag to recycle bin for deletion
+
 Phase 8 — Dev workflow
 
 Development commands:

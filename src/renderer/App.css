@@ -997,3 +997,62 @@ body, html {
   cursor: not-allowed;
   opacity: 0.5;
 }
+/* Context Menu Styles */
+.context-menu {
+  position: fixed;
+  background: #252526;
+  border: 1px solid #454545;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  min-width: 150px;
+  padding: 4px 0;
+}
+
+.context-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.context-menu-item:hover {
+  background: #094771;
+  color: #ffffff;
+}
+
+/* File Creation Styles */
+.file-create {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+}
+
+.file-name-input {
+  background: #3c3c3c;
+  color: #cccccc;
+  border: 1px solid #007acc;
+  padding: 2px 4px;
+  font-size: 13px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  outline: none;
+  flex: 1;
+}
+
+.file-name-input:focus {
+  border-color: #007acc;
+}
+
+.file-create-error {
+  position: absolute;
+  top: 100%;
+  left: 24px;
+  background: #5a1d1d;
+  color: #f48771;
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid #be1100;
+  margin-top: 2px;
+  white-space: nowrap;
+  z-index: 1000;
+}

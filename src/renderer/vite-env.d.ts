@@ -41,6 +41,19 @@ interface Window {
     saveWorkspaceSettings: (workspacePath: string, settings: any) => Promise<{
       success: boolean;
     }>;
+    createFile: (workspacePath: string, folderName: string, fileName: string) => Promise<{
+      success: boolean;
+      filePath: string;
+    }>;
+    renameFile: (workspacePath: string, oldRelativePath: string, newFileName: string) => Promise<{
+      success: boolean;
+      oldPath: string;
+      newPath: string;
+    }>;
+    deleteFile: (workspacePath: string, filePath: string) => Promise<{
+      success: boolean;
+      deletedPath: string;
+    }>;
 
     // Update functions
     checkForUpdates?: () => Promise<{ available: boolean; updateInfo?: any; message?: string; error?: string }>;

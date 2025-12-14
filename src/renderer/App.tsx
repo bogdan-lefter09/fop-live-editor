@@ -471,11 +471,17 @@ function AppContent() {
   const handleFileClick = async (filePath: string) => {
     if (!activeWorkspace) return;
 
-    const fullPath = `${activeWorkspace.path}\\${filePath}`;
+    // Normalize path separators - convert forward slashes to backslashes
+    const normalizedFilePath = filePath.replace(/\//g, '\\');
+    const fullPath = `${activeWorkspace.path}\\${normalizedFilePath}`;
     const fileName = filePath.split(/[/\\]/).pop() || filePath;
 
-    // Check if file is already open
-    const existingIndex = openFiles.findIndex(f => f.path === fullPath);
+    // Check if file is already open - use case-insensitive comparison with normalized separators
+    const existingIndex = openFiles.findIndex(f => {
+      const normalizedOpenPath = f.path.toLowerCase().replace(/\//g, '\\');
+      const normalizedFullPath = fullPath.toLowerCase().replace(/\//g, '\\');
+      return normalizedOpenPath === normalizedFullPath;
+    });
     if (existingIndex !== -1) {
       setActiveFileIndex(existingIndex);
       return;
@@ -520,6 +526,84 @@ function AppContent() {
       }
     } else if (activeFileIndex > index) {
       setActiveFileIndex(activeFileIndex - 1);
+    }
+  };
+
+  const handleFileRenamed = (oldPath: string, newPath: string) => {
+    if (!activeWorkspace) return;
+
+    // Normalize path separators - convert forward slashes to backslashes
+    const normalizedOldPath = oldPath.replace(/\//g, '\\');
+    const normalizedNewPath = newPath.replace(/\//g, '\\');
+    
+    const oldFullPath = `${activeWorkspace.path}\\${normalizedOldPath}`;
+    const newFullPath = `${activeWorkspace.path}\\${normalizedNewPath}`;
+    const newFileName = newPath.split(/[/\\]/).pop() || newPath;
+
+    // Update open files - use case-insensitive comparison and normalize separators
+    const updatedFiles = openFiles.map(file => {
+      const normalizedFilePath = file.path.toLowerCase().replace(/\//g, '\\');
+      const normalizedOldFullPath = oldFullPath.toLowerCase().replace(/\//g, '\\');
+      
+      if (normalizedFilePath === normalizedOldFullPath) {
+        return {
+          ...file,
+          path: newFullPath,
+          name: newFileName
+        };
+      }
+      return file;
+    });
+    
+    setOpenFiles(updatedFiles);
+
+    // Update toolbar selections
+    if (selectedXmlFile === oldPath) {
+      setSelectedXmlFile(newPath);
+    }
+    if (selectedXslFile === oldPath) {
+      setSelectedXslFile(newPath);
+    }
+  };
+
+  const handleFileDeleted = (filePath: string) => {
+    if (!activeWorkspace) return;
+
+    // Normalize path separators
+    const normalizedFilePath = filePath.replace(/\//g, '\\');
+    const fullPath = `${activeWorkspace.path}\\${normalizedFilePath}`;
+
+    // Find the index of the deleted file
+    const deletedFileIndex = openFiles.findIndex(file => {
+      const normalizedOpenFilePath = file.path.toLowerCase().replace(/\//g, '\\');
+      const normalizedFullPath = fullPath.toLowerCase().replace(/\//g, '\\');
+      return normalizedOpenFilePath === normalizedFullPath;
+    });
+
+    // Remove deleted file from open files
+    if (deletedFileIndex !== -1) {
+      const updatedFiles = openFiles.filter((_, index) => index !== deletedFileIndex);
+      setOpenFiles(updatedFiles);
+
+      // Update active file index
+      if (deletedFileIndex === activeFileIndex) {
+        // Deleted file was active, switch to another tab or -1 if no tabs left
+        if (updatedFiles.length > 0) {
+          setActiveFileIndex(Math.min(deletedFileIndex, updatedFiles.length - 1));
+        } else {
+          setActiveFileIndex(-1);
+        }
+      } else if (activeFileIndex > deletedFileIndex) {
+        setActiveFileIndex(activeFileIndex - 1);
+      }
+    }
+
+    // Clear toolbar selections if deleted file was selected
+    if (selectedXmlFile === filePath) {
+      setSelectedXmlFile('');
+    }
+    if (selectedXslFile === filePath) {
+      setSelectedXslFile('');
     }
   };
 
@@ -707,6 +791,9 @@ function AppContent() {
                               workspace={workspace}
                               workspaceFiles={workspaceFiles}
                               onFileClick={handleFileClick}
+                              onFilesChanged={() => loadWorkspaceFiles(workspace.path)}
+                              onFileRenamed={handleFileRenamed}
+                              onFileDeleted={handleFileDeleted}
                             />
                           )}
                           {showSearch && <SearchPanel />}

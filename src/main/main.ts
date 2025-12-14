@@ -680,6 +680,153 @@ ipcMain.handle('save-workspace-settings', async (_event, workspacePath: string, 
   }
 });
 
+// Create new file
+ipcMain.handle('create-file', async (_event, workspacePath: string, folderName: string, fileName: string) => {
+  try {
+    // Validate filename
+    if (!fileName || fileName.trim() === '') {
+      throw new Error('Filename cannot be empty');
+    }
+
+    // Check for invalid characters in filename
+    const invalidChars = /[<>:"|?*\\/]/;
+    if (invalidChars.test(fileName)) {
+      throw new Error('Filename contains invalid characters');
+    }
+
+    // Construct full file path
+    const filePath = path.join(workspacePath, folderName, fileName);
+
+    // Check if file already exists
+    if (fs.existsSync(filePath)) {
+      throw new Error('A file with this name already exists');
+    }
+
+    // Ensure the folder exists
+    const folderPath = path.dirname(filePath);
+    if (!fs.existsSync(folderPath)) {
+      fs.mkdirSync(folderPath, { recursive: true });
+    }
+
+    // Create empty file
+    fs.writeFileSync(filePath, '', 'utf-8');
+
+    console.log('Created file:', filePath);
+
+    return {
+      success: true,
+      filePath: path.join(folderName, fileName) // Return workspace-relative path
+    };
+  } catch (error: any) {
+    console.error('Error creating file:', error);
+    throw error;
+  }
+});
+
+// Rename file
+ipcMain.handle('rename-file', async (_event, workspacePath: string, oldRelativePath: string, newFileName: string) => {
+  try {
+    // Validate new filename
+    if (!newFileName || newFileName.trim() === '') {
+      throw new Error('Filename cannot be empty');
+    }
+
+    // Check for invalid characters in filename
+    const invalidChars = /[<>:"|?*\\/]/;
+    if (invalidChars.test(newFileName)) {
+      throw new Error('Filename contains invalid characters');
+    }
+
+    // Normalize the relative path (convert forward slashes to backslashes on Windows)
+    const normalizedOldRelativePath = oldRelativePath.replace(/\//g, path.sep);
+    
+    // Construct full paths
+    const oldFullPath = path.join(workspacePath, normalizedOldRelativePath);
+    const folderPath = path.dirname(oldFullPath);
+    const newFullPath = path.join(folderPath, newFileName);
+
+    console.log('Rename operation:');
+    console.log('  Old relative:', oldRelativePath);
+    console.log('  Old full:', oldFullPath);
+    console.log('  New full:', newFullPath);
+
+    // Check if old file exists
+    if (!fs.existsSync(oldFullPath)) {
+      throw new Error(`Original file not found: ${oldFullPath}`);
+    }
+
+    // Check if new filename already exists
+    if (fs.existsSync(newFullPath) && oldFullPath !== newFullPath) {
+      throw new Error('A file with this name already exists');
+    }
+
+    // Get the folder name (xml or xsl)
+    const folderName = path.basename(folderPath);
+    // Return path with forward slashes for consistency with file scanner
+    const newRelativePath = `${folderName}/${newFileName}`;
+
+    // Rename file on disk
+    fs.renameSync(oldFullPath, newFullPath);
+
+    console.log('Successfully renamed file to:', newFullPath);
+
+    return {
+      success: true,
+      oldPath: oldRelativePath,
+      newPath: newRelativePath
+    };
+  } catch (error: any) {
+    console.error('Error renaming file:', error);
+    throw error;
+  }
+});
+
+// Delete file
+ipcMain.handle('delete-file', async (_event, workspacePath: string, filePath: string) => {
+  try {
+    // Normalize the relative path (convert forward slashes to backslashes on Windows)
+    const normalizedFilePath = filePath.replace(/\//g, path.sep);
+    
+    // Construct full path
+    const fullPath = path.join(workspacePath, normalizedFilePath);
+
+    console.log('Delete operation:');
+    console.log('  File path:', filePath);
+    console.log('  Full path:', fullPath);
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      throw new Error('File not found');
+    }
+
+    // Check if path is a directory
+    const stats = fs.statSync(fullPath);
+    if (stats.isDirectory()) {
+      throw new Error('Cannot delete folders (only files can be deleted)');
+    }
+
+    // Validate path is within workspace
+    const resolvedFullPath = path.resolve(fullPath);
+    const resolvedWorkspacePath = path.resolve(workspacePath);
+    if (!resolvedFullPath.startsWith(resolvedWorkspacePath)) {
+      throw new Error('Cannot delete file: path is outside workspace');
+    }
+
+    // Delete file
+    fs.unlinkSync(fullPath);
+
+    console.log('Successfully deleted file:', fullPath);
+
+    return {
+      success: true,
+      deletedPath: filePath
+    };
+  } catch (error: any) {
+    console.error('Error deleting file:', error);
+    throw error;
+  }
+});
+
 // Generate PDF with FOP Server
 ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, xslFolder: string) => {
   try {
