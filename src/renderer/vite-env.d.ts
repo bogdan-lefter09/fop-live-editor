@@ -14,7 +14,7 @@ interface Window {
       stdout: string;
       stderr: string;
     }>;
-    onGenerationLog: (callback: (log: string) => void) => void;
+    onGenerationLog: (callback: (log: string) => void) => (() => void);
 
     // Workspace functions
     createWorkspace: (folderPath: string, workspaceName: string) => Promise<{
@@ -59,22 +59,22 @@ interface Window {
     checkForUpdates?: () => Promise<{ available: boolean; updateInfo?: any; message?: string; error?: string }>;
     downloadUpdate?: () => Promise<{ success: boolean; error?: string; message?: string }>;
     quitAndInstall?: () => void;
-    onUpdateAvailable?: (callback: (info: any) => void) => void;
-    onUpdateDownloaded?: (callback: (info: any) => void) => void;
-    onUpdateProgress?: (callback: (progress: any) => void) => void;
-    onUpdateError?: (callback: (error: string) => void) => void;
+    onUpdateAvailable?: (callback: (info: any) => void) => (() => void);
+    onUpdateDownloaded?: (callback: (info: any) => void) => (() => void);
+    onUpdateProgress?: (callback: (progress: any) => void) => (() => void);
+    onUpdateError?: (callback: (error: string) => void) => (() => void);
 
     // File watcher functions
     startFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
     stopFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
-    onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => void;
+    onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => (() => void);
 
     // Global settings functions
     getGlobalSettings: () => Promise<{ lastOpenedWorkspaces: string[]; recentWorkspaces: string[] }>;
     saveLastOpenedWorkspaces: (workspacePaths: string[]) => Promise<{ success: boolean }>;
     addRecentWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
     getRecentWorkspaces: () => Promise<string[]>;
-    onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => void;
+    onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => (() => void);
 
     // Menu event listeners
     onMenuNewWorkspace: (callback: () => void) => (() => void);

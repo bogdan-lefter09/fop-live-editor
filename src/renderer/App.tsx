@@ -93,33 +93,44 @@ function AppContent() {
   // Listen for generation logs
   useEffect(() => {
     if (window.electronAPI) {
-      window.electronAPI.onGenerationLog((log: string) => {
+      const handleLog = (log: string) => {
         setLogs(prev => prev + log);
-      });
+      };
+      
+      const cleanup = window.electronAPI.onGenerationLog(handleLog);
+      return cleanup;
     }
-  }, [setLogs]);
+  }, []);
 
   // Listen for update events
   useEffect(() => {
     if (window.electronAPI) {
-      window.electronAPI.onUpdateAvailable?.((info: any) => {
+      const cleanups: (() => void)[] = [];
+
+      const cleanup1 = window.electronAPI.onUpdateAvailable?.((info: any) => {
         setUpdateAvailable(true);
         setUpdateInfo(info);
       });
+      if (cleanup1) cleanups.push(cleanup1);
 
-      window.electronAPI.onUpdateDownloaded?.((_info: any) => {
+      const cleanup2 = window.electronAPI.onUpdateDownloaded?.((_info: any) => {
         setUpdateDownloaded(true);
         setIsDownloading(false);
       });
+      if (cleanup2) cleanups.push(cleanup2);
 
-      window.electronAPI.onUpdateProgress?.((progress: any) => {
+      const cleanup3 = window.electronAPI.onUpdateProgress?.((progress: any) => {
         setDownloadProgress(progress.percent);
       });
+      if (cleanup3) cleanups.push(cleanup3);
 
-      window.electronAPI.onUpdateError?.((error: string) => {
+      const cleanup4 = window.electronAPI.onUpdateError?.((error: string) => {
         console.error('Update error:', error);
         setIsDownloading(false);
       });
+      if (cleanup4) cleanups.push(cleanup4);
+
+      return () => cleanups.forEach(cleanup => cleanup());
     }
   }, []);
 
@@ -166,14 +177,19 @@ function AppContent() {
       }
     };
 
-    window.electronAPI.onFileChanged(handleFileChanged);
+    const cleanup1 = window.electronAPI.onFileChanged(handleFileChanged);
 
     // Listen for workspace restoration
-    window.electronAPI.onRestoreWorkspaces(async (workspacePaths: string[]) => {
+    const cleanup2 = window.electronAPI.onRestoreWorkspaces(async (workspacePaths: string[]) => {
       for (const workspacePath of workspacePaths) {
         await openWorkspaceByPath(workspacePath);
       }
     });
+
+    return () => {
+      cleanup1();
+      cleanup2();
+    };
   }, []);
 
   const handleOpenFolderAsWorkspace = async () => {

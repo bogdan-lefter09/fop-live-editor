@@ -16,7 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteFile: (workspacePath: string, filePath: string) => ipcRenderer.invoke('delete-file', workspacePath, filePath),
   generatePdf: (xmlPath: string, xslPath: string, xslFolder: string) => ipcRenderer.invoke('generate-pdf', xmlPath, xslPath, xslFolder),
   onGenerationLog: (callback: (log: string) => void) => {
-    ipcRenderer.on('generation-log', (_event, log) => callback(log));
+    const listener = (_event: any, log: string) => callback(log);
+    ipcRenderer.on('generation-log', listener);
+    return () => ipcRenderer.removeListener('generation-log', listener);
   },
 
   // Update functions
@@ -24,23 +26,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
   onUpdateAvailable: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-available', (_event, info) => callback(info));
+    const listener = (_event: any, info: any) => callback(info);
+    ipcRenderer.on('update-available', listener);
+    return () => ipcRenderer.removeListener('update-available', listener);
   },
   onUpdateDownloaded: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-downloaded', (_event, info) => callback(info));
+    const listener = (_event: any, info: any) => callback(info);
+    ipcRenderer.on('update-downloaded', listener);
+    return () => ipcRenderer.removeListener('update-downloaded', listener);
   },
   onUpdateProgress: (callback: (progress: any) => void) => {
-    ipcRenderer.on('update-progress', (_event, progress) => callback(progress));
+    const listener = (_event: any, progress: any) => callback(progress);
+    ipcRenderer.on('update-progress', listener);
+    return () => ipcRenderer.removeListener('update-progress', listener);
   },
   onUpdateError: (callback: (error: string) => void) => {
-    ipcRenderer.on('update-error', (_event, error) => callback(error));
+    const listener = (_event: any, error: string) => callback(error);
+    ipcRenderer.on('update-error', listener);
+    return () => ipcRenderer.removeListener('update-error', listener);
   },
 
   // File watcher functions
   startFileWatcher: (workspacePath: string) => ipcRenderer.invoke('start-file-watcher', workspacePath),
   stopFileWatcher: (workspacePath: string) => ipcRenderer.invoke('stop-file-watcher', workspacePath),
   onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => {
-    ipcRenderer.on('file-changed', (_event, data) => callback(data));
+    const listener = (_event: any, data: { workspacePath: string, filePath: string }) => callback(data);
+    ipcRenderer.on('file-changed', listener);
+    return () => ipcRenderer.removeListener('file-changed', listener);
   },
 
   // Global settings functions
@@ -49,7 +61,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addRecentWorkspace: (workspacePath: string) => ipcRenderer.invoke('add-recent-workspace', workspacePath),
   getRecentWorkspaces: () => ipcRenderer.invoke('get-recent-workspaces'),
   onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => {
-    ipcRenderer.on('restore-workspaces', (_event, workspacePaths) => callback(workspacePaths));
+    const listener = (_event: any, workspacePaths: string[]) => callback(workspacePaths);
+    ipcRenderer.on('restore-workspaces', listener);
+    return () => ipcRenderer.removeListener('restore-workspaces', listener);
   },
 
   // Menu event listeners
