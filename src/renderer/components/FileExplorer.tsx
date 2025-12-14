@@ -1,4 +1,4 @@
-import { WorkspaceFiles, Workspace } from '../types';
+import { Workspace, WorkspaceFiles } from '../types';
 
 interface FileExplorerProps {
   workspace: Workspace;

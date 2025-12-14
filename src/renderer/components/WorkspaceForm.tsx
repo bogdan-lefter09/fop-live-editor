@@ -35,8 +35,16 @@ export const WorkspaceForm = ({ onCreateWorkspace, onCancel, showCancel }: Works
   };
 
   return (
-    <div className="workspace-form">
-      <h2>Create PDF Workspace</h2>
+    <div className="workspace-form" style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      width: '100%'
+    }}>
+      <div style={{ maxWidth: '600px', width: '100%' }}>
+        <h2>Create PDF Workspace</h2>
 
       <div className="form-group">
         <label>Folder Location:</label>
@@ -77,6 +85,7 @@ export const WorkspaceForm = ({ onCreateWorkspace, onCancel, showCancel }: Works
             Cancel
           </button>
         )}
+      </div>
       </div>
     </div>
   );

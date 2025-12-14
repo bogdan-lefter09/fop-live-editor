@@ -6,7 +6,14 @@ interface NoWorkspaceViewProps {
 
 export const NoWorkspaceView = ({ recentWorkspaces, onNewWorkspace, onOpenWorkspace }: NoWorkspaceViewProps) => {
   return (
-    <div className="no-workspace-state">
+    <div className="no-workspace-state" style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      width: '100%',
+      height: '100%'
+    }}>
       <button
         className="btn btn-primary btn-large"
         onClick={onNewWorkspace}
@@ -17,8 +24,8 @@ export const NoWorkspaceView = ({ recentWorkspaces, onNewWorkspace, onOpenWorksp
       {recentWorkspaces.length > 0 && (
         <div className="recent-workspaces-container" style={{ 
           marginTop: '30px', 
-          width: '600px', 
-          maxWidth: '90%'
+          width: '100%',
+          maxWidth: '800px'
         }}>
           <h3 style={{ 
             marginBottom: '12px', 
@@ -26,7 +33,8 @@ export const NoWorkspaceView = ({ recentWorkspaces, onNewWorkspace, onOpenWorksp
             fontSize: '14px',
             fontWeight: 'normal',
             textTransform: 'uppercase',
-            letterSpacing: '0.5px'
+            letterSpacing: '0.5px',
+            textAlign: 'center'
           }}>
             Recent Workspaces
           </h3>
