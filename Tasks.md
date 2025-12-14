@@ -26,6 +26,158 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 - **VS Code-style Interface**: Vertical icon bar with file explorer and search functionality
 - **Monaco Editor Integration**: VS Code editor component for XML/XSL editing
 
+### Phase 7 Features (File/Workspace Management)
+- ✅ **Phase 7a**: Open Existing Folder as Workspace
+- ✅ **Phase 7b**: File Creation via Context Menu
+- ✅ **Phase 7c**: File Renaming via Context Menu
+- ✅ **Phase 7d**: File Deletion via Context Menu
+- ✅ **Phase 7e**: Folder Refresh via Context Menu
+
+### Search & Navigation
+- ✅ **Full-text Search**: Workspace-wide search with regex support, case-sensitive options
+- ✅ **Recent Workspaces**: List of recently opened workspaces in NoWorkspaceView
+- ✅ **Keyboard Shortcuts**: Ctrl+S for save
+
+### Auto-Update
+- ✅ **Phase 10**: Auto-update functionality with electron-updater fully implemented
+
+## 📋 Planned Features (Not Yet Implemented)
+
+### 🔴 High Priority (Critical UX Improvements)
+
+1. **Move to Recycle Bin for File Deletion**
+   - **Status**: ❌ Not implemented
+   - **Current**: Permanent deletion using `fs.unlinkSync()`
+   - **Target**: Use `shell.trashItem()` to move files to Windows Recycle Bin
+   - **Impact**: Safety - allows users to recover accidentally deleted files
+   - **Complexity**: Low - single function replacement
+   - **Location**: `src/main/main.ts` (delete-file handler)
+
+2. **Folder Operations (Create/Delete/Rename)**
+   - **Status**: ❌ Not implemented
+   - **Current**: Can only create/rename/delete files, not folders
+   - **Target**: Add context menu options for folders (New Folder, Rename Folder, Delete Folder)
+   - **Impact**: Organization - users need to create folder structures within workspace
+   - **Complexity**: Medium - recursive operations for delete, path updates for rename
+   - **IPC Handlers**: `create-folder`, `delete-folder`, `rename-folder`
+
+3. **Delete Key Shortcut**
+   - **Status**: ❌ Not implemented
+   - **Current**: Only Ctrl+S keyboard shortcut exists
+   - **Target**: Press Delete key to delete selected file
+   - **Impact**: Efficiency - much faster than right-click → Delete
+   - **Complexity**: Low - add keydown listener in FileExplorer
+   - **Location**: `src/renderer/components/FileExplorer.tsx`
+
+4. **F5 Refresh Shortcut**
+   - **Status**: ❌ Not implemented
+   - **Current**: Must right-click folder → Refresh
+   - **Target**: Press F5 to refresh current folder/workspace
+   - **Impact**: Convenience - faster than context menu
+   - **Complexity**: Low - add keydown listener
+   - **Location**: `src/renderer/components/FileExplorer.tsx`
+
+### 🟡 Medium Priority (Important Enhancements)
+
+5. **Auto-Refresh on External File Changes**
+   - **Status**: ❌ Not implemented
+   - **Current**: File watchers only trigger PDF generation, not UI refresh
+   - **Target**: Automatically detect and update UI when files added/removed externally
+   - **Impact**: Seamless workflow with external tools
+   - **Complexity**: Medium - extend chokidar watchers to send UI update events
+   - **Location**: `src/main/main.ts` (file watcher setup)
+
+6. **Multi-Select Files**
+   - **Status**: ❌ Not implemented
+   - **Current**: Can only select one file at a time
+   - **Target**: Ctrl+Click or Shift+Click to select multiple files, bulk operations
+   - **Impact**: Efficiency - bulk delete, bulk open, etc.
+   - **Complexity**: Medium - state management for selections, UI updates
+   - **Location**: `src/renderer/components/FileExplorer.tsx`
+
+7. **Undo Operations (Rename/Delete)**
+   - **Status**: ❌ Not implemented
+   - **Current**: No way to undo file operations
+   - **Target**: Ctrl+Z to undo recent rename/delete operations
+   - **Impact**: Safety - recover from mistakes
+   - **Complexity**: High - requires operation history tracking
+   - **Dependencies**: Works best with Recycle Bin (#1)
+
+8. **Settings UI Screen**
+   - **Status**: ❌ Not implemented
+   - **Current**: Global settings exist but no UI to modify them
+   - **Target**: Settings panel for custom JRE/FOP paths, preferences
+   - **Impact**: Flexibility - advanced users can customize environment
+   - **Complexity**: Medium - new UI panel, validation logic
+   - **Location**: New component `src/renderer/components/SettingsPanel.tsx`
+
+9. **Ctrl+W to Close Tabs**
+   - **Status**: ❌ Not implemented
+   - **Current**: Must click X on each tab
+   - **Target**: Ctrl+W to close current file tab
+   - **Impact**: Efficiency - faster tab management
+   - **Complexity**: Low - add keyboard shortcut handler
+   - **Location**: `src/renderer/App.tsx`
+
+### 🟢 Low Priority (Nice to Have)
+
+10. **Copy/Paste Files**
+    - **Status**: ❌ Not implemented
+    - **Target**: Context menu "Copy" and "Paste" for files
+    - **Impact**: Convenience - duplicate files easily
+    - **Complexity**: Medium - clipboard management, file duplication
+    - **IPC Handlers**: `copy-file`, `paste-file`
+
+11. **Drag-and-Drop File Organization**
+    - **Status**: ❌ Not implemented
+    - **Target**: Drag files between folders visually
+    - **Impact**: Better UX - intuitive file organization
+    - **Complexity**: High - drag-drop API, visual feedback, move operations
+
+12. **Toast Notifications**
+    - **Status**: ❌ Not implemented
+    - **Target**: Brief success/error messages ("File deleted successfully", "3 new files detected")
+    - **Impact**: Feedback - users know operations succeeded
+    - **Complexity**: Low - notification component
+    - **Location**: New component `src/renderer/components/Toast.tsx`
+
+13. **Confirmation Dialog Toggle**
+    - **Status**: ❌ Not implemented
+    - **Target**: "Don't ask me again" checkbox for delete confirmations
+    - **Impact**: Speed - power users can skip dialogs
+    - **Complexity**: Low - settings persistence
+    - **Location**: `src/renderer/components/ConfirmDialog.tsx` + settings
+
+14. **File/Folder Icons by Type**
+    - **Status**: ❌ Not implemented
+    - **Target**: Different icons for .xml, .xsl, folders, etc.
+    - **Impact**: Visual clarity - easier to identify file types
+    - **Complexity**: Low - icon mapping
+    - **Location**: `src/renderer/components/FileExplorer.tsx`
+
+15. **Search Results Highlighting in Editor**
+    - **Status**: ❌ Not implemented
+    - **Target**: Click search result → open file → highlight matched line in editor
+    - **Impact**: Navigation - faster to find searched text
+    - **Complexity**: Medium - Monaco editor API integration
+
+## 💡 Implementation Recommendations
+
+**Quick Wins (Implement First):**
+- #1 (Recycle Bin) - Single line change, huge safety improvement
+- #3 (Delete Key) - Simple keyboard listener, immediate UX boost
+- #4 (F5 Refresh) - Simple keyboard listener
+- #9 (Ctrl+W Close Tab) - Simple keyboard listener
+
+**Next Steps (Medium Effort, High Value):**
+- #2 (Folder Operations) - Essential for organization
+- #5 (Auto-Refresh) - Great for external tool integration
+- #12 (Toast Notifications) - Good feedback mechanism
+
+**Future Enhancements:**
+- #6, #7, #10, #11 - More advanced features
+- #8 (Settings UI) - Important but less urgent
+
 Phases & step-by-step tasks
 
 Phase 0 — Prep & downloads (before coding)
