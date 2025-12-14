@@ -31,4 +31,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateError: (callback: (error: string) => void) => {
     ipcRenderer.on('update-error', (_event, error) => callback(error));
   },
+
+  // File watcher functions
+  startFileWatcher: (workspacePath: string) => ipcRenderer.invoke('start-file-watcher', workspacePath),
+  stopFileWatcher: (workspacePath: string) => ipcRenderer.invoke('stop-file-watcher', workspacePath),
+  onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => {
+    ipcRenderer.on('file-changed', (_event, data) => callback(data));
+  },
+
+  // Global settings functions
+  getGlobalSettings: () => ipcRenderer.invoke('get-global-settings'),
+  saveLastOpenedWorkspaces: (workspacePaths: string[]) => ipcRenderer.invoke('save-last-opened-workspaces', workspacePaths),
+  addRecentWorkspace: (workspacePath: string) => ipcRenderer.invoke('add-recent-workspace', workspacePath),
+  getRecentWorkspaces: () => ipcRenderer.invoke('get-recent-workspaces'),
+  onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => {
+    ipcRenderer.on('restore-workspaces', (_event, workspacePaths) => callback(workspacePaths));
+  },
 });

@@ -3,6 +3,8 @@ import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
 import { autoUpdater } from 'electron-updater';
+import chokidar from 'chokidar';
+import Store from 'electron-store';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
@@ -11,6 +13,18 @@ let fopServerProcess: ChildProcess | null = null;
 let fopServerReady = false;
 let pendingRequests: Map<number, PendingRequest> = new Map();
 let requestIdCounter = 0;
+
+// Global settings store
+const store = new Store({
+  defaults: {
+    lastOpenedWorkspaces: [],
+    recentWorkspaces: [],
+    maxRecentWorkspaces: 10
+  }
+});
+
+// Track file watchers per workspace
+const workspaceWatchers: Map<string, { watcher: chokidar.FSWatcher, debounceTimer: NodeJS.Timeout | null }> = new Map();
 
 interface PendingRequest {
   resolve: (value: any) => void;
@@ -117,6 +131,11 @@ app.whenReady().then(() => {
   // Check for updates
   setupAutoUpdater();
 
+  // Restore last opened workspaces
+  setTimeout(() => {
+    restoreLastOpenedWorkspaces();
+  }, 1000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -126,6 +145,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopFopServer(); // Stop FOP server on app quit
+  stopAllWatchers(); // Stop all file watchers
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -133,7 +153,30 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopFopServer();
+  stopAllWatchers();
 });
+
+// Restore last opened workspaces from settings
+function restoreLastOpenedWorkspaces() {
+  const lastOpenedWorkspaces = store.get('lastOpenedWorkspaces', []) as string[];
+  
+  if (lastOpenedWorkspaces.length > 0 && mainWindow) {
+    console.log('Restoring last opened workspaces:', lastOpenedWorkspaces);
+    mainWindow.webContents.send('restore-workspaces', lastOpenedWorkspaces);
+  }
+}
+
+// Stop all file watchers
+function stopAllWatchers() {
+  console.log('Stopping all file watchers...');
+  workspaceWatchers.forEach((watcherData) => {
+    if (watcherData.debounceTimer) {
+      clearTimeout(watcherData.debounceTimer);
+    }
+    watcherData.watcher.close();
+  });
+  workspaceWatchers.clear();
+}
 
 // FOP Server Management
 function startFopServer() {
@@ -628,6 +671,137 @@ ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, 
     }
     throw error;
   }
+});
+
+// File watcher management
+ipcMain.handle('start-file-watcher', async (_event, workspacePath: string) => {
+  try {
+    // Stop existing watcher if any
+    if (workspaceWatchers.has(workspacePath)) {
+      const existing = workspaceWatchers.get(workspacePath);
+      if (existing) {
+        if (existing.debounceTimer) clearTimeout(existing.debounceTimer);
+        existing.watcher.close();
+      }
+    }
+
+    const xmlFolder = path.join(workspacePath, 'xml');
+    const xslFolder = path.join(workspacePath, 'xsl');
+
+    // Watch both XML and XSL folders
+    const watcher = chokidar.watch([xmlFolder, xslFolder], {
+      ignored: /(^|[\/\\])\../, // ignore dotfiles
+      persistent: true,
+      ignoreInitial: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 300,
+        pollInterval: 100
+      }
+    });
+
+    let debounceTimer: NodeJS.Timeout | null = null;
+
+    const handleFileChange = (filePath: string) => {
+      console.log('File changed:', filePath);
+      
+      // Clear existing timer
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+
+      // Set new debounced generation
+      debounceTimer = setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.webContents.send('file-changed', { workspacePath, filePath });
+        }
+      }, 500); // 500ms debounce
+
+      // Update the stored timer
+      const watcherData = workspaceWatchers.get(workspacePath);
+      if (watcherData) {
+        watcherData.debounceTimer = debounceTimer;
+      }
+    };
+
+    watcher
+      .on('change', handleFileChange)
+      .on('add', handleFileChange)
+      .on('unlink', handleFileChange)
+      .on('error', (error) => console.error('Watcher error:', error));
+
+    workspaceWatchers.set(workspacePath, { watcher, debounceTimer });
+    console.log('File watcher started for:', workspacePath);
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error starting file watcher:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('stop-file-watcher', async (_event, workspacePath: string) => {
+  try {
+    const watcherData = workspaceWatchers.get(workspacePath);
+    if (watcherData) {
+      if (watcherData.debounceTimer) {
+        clearTimeout(watcherData.debounceTimer);
+      }
+      watcherData.watcher.close();
+      workspaceWatchers.delete(workspacePath);
+      console.log('File watcher stopped for:', workspacePath);
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error stopping file watcher:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Global settings management
+ipcMain.handle('get-global-settings', async () => {
+  return {
+    lastOpenedWorkspaces: store.get('lastOpenedWorkspaces', []),
+    recentWorkspaces: store.get('recentWorkspaces', [])
+  };
+});
+
+ipcMain.handle('save-last-opened-workspaces', async (_event, workspacePaths: string[]) => {
+  store.set('lastOpenedWorkspaces', workspacePaths);
+  return { success: true };
+});
+
+ipcMain.handle('add-recent-workspace', async (_event, workspacePath: string) => {
+  const recentWorkspaces = store.get('recentWorkspaces', []) as string[];
+  const maxRecent = store.get('maxRecentWorkspaces', 10) as number;
+
+  // Remove if already exists
+  const filtered = recentWorkspaces.filter(p => p !== workspacePath);
+  
+  // Add to beginning
+  filtered.unshift(workspacePath);
+  
+  // Limit to max
+  const limited = filtered.slice(0, maxRecent);
+  
+  store.set('recentWorkspaces', limited);
+  return { success: true };
+});
+
+ipcMain.handle('get-recent-workspaces', async () => {
+  const recentWorkspaces = store.get('recentWorkspaces', []) as string[];
+  
+  // Filter out workspaces that no longer exist
+  const existing = recentWorkspaces.filter(workspacePath => {
+    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
+    return fs.existsSync(configPath);
+  });
+  
+  // Update store if any were filtered out
+  if (existing.length !== recentWorkspaces.length) {
+    store.set('recentWorkspaces', existing);
+  }
+  
+  return existing;
 });
 
 // Auto-updater setup

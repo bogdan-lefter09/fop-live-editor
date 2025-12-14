@@ -41,6 +41,7 @@ function App() {
   // Editor state for open files
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
+  const [editorReloadKey, setEditorReloadKey] = useState<number>(0)
   const editorRef = useRef<any>(null)
 
   // State for PDF preview (per workspace)
@@ -50,12 +51,28 @@ function App() {
   const [logs, setLogs] = useState<string>('')
   const [showLogs, setShowLogs] = useState<boolean>(false)
 
+  // State for recent workspaces
+  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>([])
+
   // State for updates
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false)
   const [updateInfo, setUpdateInfo] = useState<any>(null)
   const [updateDownloaded, setUpdateDownloaded] = useState<boolean>(false)
   const [downloadProgress, setDownloadProgress] = useState<number>(0)
   const [isDownloading, setIsDownloading] = useState<boolean>(false)
+
+  // Load recent workspaces on mount
+  useEffect(() => {
+    const loadRecentWorkspaces = async () => {
+      try {
+        const recent = await window.electronAPI.getRecentWorkspaces();
+        setRecentWorkspaces(recent);
+      } catch (error) {
+        console.error('Failed to load recent workspaces:', error);
+      }
+    };
+    loadRecentWorkspaces();
+  }, []);
 
   // Listen for generation logs
   useEffect(() => {
@@ -89,6 +106,82 @@ function App() {
       });
     }
   }, []);
+
+  // Compute active workspace
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
+
+  // Use refs to access current state in event handlers without causing re-registration
+  const workspacesRef = useRef(workspaces);
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  const openFilesRef = useRef(openFiles);
+  const activeFileIndexRef = useRef(activeFileIndex);
+  const autoGenerateRef = useRef(autoGenerate);
+  const selectedXmlFileRef = useRef(selectedXmlFile);
+  const selectedXslFileRef = useRef(selectedXslFile);
+
+  // Keep refs up to date
+  useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
+  useEffect(() => { activeWorkspaceIdRef.current = activeWorkspaceId; }, [activeWorkspaceId]);
+  useEffect(() => { activeWorkspaceRef.current = activeWorkspace; }, [activeWorkspace]);
+  useEffect(() => { openFilesRef.current = openFiles; }, [openFiles]);
+  useEffect(() => { activeFileIndexRef.current = activeFileIndex; }, [activeFileIndex]);
+  useEffect(() => { autoGenerateRef.current = autoGenerate; }, [autoGenerate]);
+  useEffect(() => { selectedXmlFileRef.current = selectedXmlFile; }, [selectedXmlFile]);
+  useEffect(() => { selectedXslFileRef.current = selectedXslFile; }, [selectedXslFile]);
+
+  // Listen for file changes (for auto-generate and editor reload)
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    const handleFileChanged = async (data: { workspacePath: string, filePath: string }) => {
+      // Check if this is the active workspace
+      const workspace = workspacesRef.current.find(w => w.path === data.workspacePath);
+      if (!workspace || workspace.id !== activeWorkspaceIdRef.current) return;
+
+      // Normalize paths for comparison (handle different separators)
+      const normalizedChangedPath = data.filePath.replace(/\//g, '\\').toLowerCase();
+      const fileIndex = openFilesRef.current.findIndex(f => f.path.replace(/\//g, '\\').toLowerCase() === normalizedChangedPath);
+      
+      if (fileIndex !== -1) {
+        try {
+          const newContent = await window.electronAPI.readFile(data.filePath);
+          
+          setOpenFiles(files => {
+            const updated = [...files];
+            updated[fileIndex] = {
+              ...updated[fileIndex],
+              content: newContent,
+              originalContent: newContent,
+              isDirty: false
+            };
+            return updated;
+          });
+          
+          // Force editor to remount with new content if this is the active file
+          if (fileIndex === activeFileIndexRef.current) {
+            setEditorReloadKey(prev => prev + 1);
+          }
+        } catch (error) {
+          console.error('Failed to reload file:', error);
+        }
+      }
+
+      // Auto-generate PDF if enabled and files are selected
+      if (autoGenerateRef.current && activeWorkspaceRef.current && selectedXmlFileRef.current && selectedXslFileRef.current) {
+        setTimeout(() => handleGeneratePDF(), 100);
+      }
+    };
+
+    window.electronAPI.onFileChanged(handleFileChanged);
+
+    // Listen for workspace restoration
+    window.electronAPI.onRestoreWorkspaces(async (workspacePaths: string[]) => {
+      for (const workspacePath of workspacePaths) {
+        await openWorkspaceByPath(workspacePath);
+      }
+    });
+  }, []); // Empty dependency array - only register once
 
   // Listen for menu events
   useEffect(() => {
@@ -130,6 +223,45 @@ function App() {
     }
   };
 
+  // Open workspace by path (for restoration)
+  const openWorkspaceByPath = async (workspacePath: string) => {
+    try {
+      // Check if workspace is already open
+      const isAlreadyOpen = workspaces.some(w => w.path === workspacePath);
+      if (isAlreadyOpen) {
+        console.log('Workspace already open:', workspacePath);
+        return;
+      }
+
+      // Load workspace settings to get name
+      const settings = await window.electronAPI.loadWorkspaceSettings(workspacePath);
+      
+      // Create new workspace
+      const newWorkspace: Workspace = {
+        id: `workspace-${Date.now()}-${Math.random()}`,
+        name: settings.workspaceName || workspacePath.split('\\').pop() || 'Workspace',
+        path: workspacePath
+      };
+
+      setWorkspaces(prev => [...prev, newWorkspace]);
+      setActiveWorkspaceId(newWorkspace.id);
+
+      // Add to recent workspaces
+      await window.electronAPI.addRecentWorkspace(workspacePath);
+
+      // Update recent workspaces list
+      const recent = await window.electronAPI.getRecentWorkspaces();
+      setRecentWorkspaces(recent);
+
+      // Start file watcher if auto-generate is enabled
+      if (settings.autoGenerate) {
+        await window.electronAPI.startFileWatcher(workspacePath);
+      }
+    } catch (error) {
+      console.error('Error opening workspace:', error);
+    }
+  };
+
   const handleCreateWorkspace = async () => {
     if (!workspaceFolder || !workspaceName.trim()) {
       alert('Please select a folder and enter a workspace name');
@@ -168,6 +300,9 @@ function App() {
         setWorkspaces([...workspaces, newWorkspace]);
         setActiveWorkspaceId(newWorkspace.id);
 
+        // Add to recent workspaces
+        await window.electronAPI.addRecentWorkspace(result.workspacePath);
+
         // Reset form
         setShowWorkspaceForm(false);
         setWorkspaceFolder('');
@@ -179,7 +314,18 @@ function App() {
     }
   };
 
-  const handleCloseWorkspace = (workspaceId: string) => {
+  const handleCloseWorkspace = async (workspaceId: string) => {
+    const workspace = workspaces.find(w => w.id === workspaceId);
+    
+    if (workspace) {
+      // Stop file watcher for this workspace
+      try {
+        await window.electronAPI.stopFileWatcher(workspace.path);
+      } catch (error) {
+        console.error('Failed to stop file watcher:', error);
+      }
+    }
+
     const updatedWorkspaces = workspaces.filter(w => w.id !== workspaceId);
     setWorkspaces(updatedWorkspaces);
 
@@ -193,16 +339,12 @@ function App() {
     }
   };
 
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
-
   // Load workspace files and settings when active workspace changes
   useEffect(() => {
     if (activeWorkspace) {
       loadWorkspaceFiles(activeWorkspace.path);
+      // Note: loadWorkspaceSettings now handles restoring openFiles, so we don't clear them here
       loadWorkspaceSettings(activeWorkspace.path);
-      // Clear open files when switching workspace
-      setOpenFiles([]);
-      setActiveFileIndex(-1);
     } else {
       // Clear files when no workspace is active
       setWorkspaceFiles({ xml: [], xsl: [] });
@@ -229,8 +371,41 @@ function App() {
       setSelectedXmlFile(settings.selectedXmlFile || '');
       setSelectedXslFile(settings.selectedXslFile || '');
       setAutoGenerate(settings.autoGenerate || false);
+      
+      // Restore open files from settings
+      if (settings.openFiles && settings.openFiles.length > 0) {
+        const filesToOpen: OpenFile[] = [];
+        for (const relativeFilePath of settings.openFiles) {
+          const fullPath = `${workspacePath}\\${relativeFilePath}`;
+          try {
+            const content = await window.electronAPI.readFile(fullPath);
+            const fileName = relativeFilePath.split(/[/\\]/).pop() || relativeFilePath;
+            filesToOpen.push({
+              path: fullPath,
+              name: fileName,
+              content: content,
+              isDirty: false,
+              originalContent: content
+            });
+          } catch (error) {
+            console.error(`Failed to restore file ${relativeFilePath}:`, error);
+          }
+        }
+        setOpenFiles(filesToOpen);
+        if (filesToOpen.length > 0) {
+          setActiveFileIndex(0);
+        } else {
+          setActiveFileIndex(-1);
+        }
+      } else {
+        // No files to restore, clear the open files
+        setOpenFiles([]);
+        setActiveFileIndex(-1);
+      }
     } catch (error) {
       console.error('Error loading workspace settings:', error);
+      setOpenFiles([]);
+      setActiveFileIndex(-1);
     }
   };
 
@@ -251,12 +426,51 @@ function App() {
     }
   };
 
-  // Save settings when toolbar selections change
+  // Save settings when toolbar selections change or files open/close
   useEffect(() => {
-    if (activeWorkspace && (selectedXmlFile || selectedXslFile)) {
+    if (activeWorkspace && (selectedXmlFile || selectedXslFile || openFiles.length > 0)) {
       saveWorkspaceSettings();
     }
-  }, [selectedXmlFile, selectedXslFile, autoGenerate]);
+  }, [selectedXmlFile, selectedXslFile, autoGenerate, openFiles]);
+
+  // Start/stop file watcher when auto-generate changes
+  useEffect(() => {
+    if (activeWorkspace) {
+      if (autoGenerate) {
+        window.electronAPI.startFileWatcher(activeWorkspace.path)
+          .then(() => console.log('File watcher started for:', activeWorkspace.path))
+          .catch(err => console.error('Failed to start file watcher:', err));
+      } else {
+        window.electronAPI.stopFileWatcher(activeWorkspace.path)
+          .then(() => console.log('File watcher stopped for:', activeWorkspace.path))
+          .catch(err => console.error('Failed to stop file watcher:', err));
+      }
+    }
+  }, [autoGenerate, activeWorkspace]);
+
+  // Start/stop file watcher when auto-generate changes
+  useEffect(() => {
+    if (activeWorkspace) {
+      if (autoGenerate) {
+        window.electronAPI.startFileWatcher(activeWorkspace.path)
+          .then(() => console.log('File watcher started for:', activeWorkspace.path))
+          .catch(err => console.error('Failed to start file watcher:', err));
+      } else {
+        window.electronAPI.stopFileWatcher(activeWorkspace.path)
+          .then(() => console.log('File watcher stopped for:', activeWorkspace.path))
+          .catch(err => console.error('Failed to stop file watcher:', err));
+      }
+    }
+  }, [autoGenerate, activeWorkspace]);
+
+  // Save open workspaces whenever the workspace list changes
+  useEffect(() => {
+    const workspacePaths = workspaces.map(w => w.path);
+    if (workspacePaths.length > 0) {
+      window.electronAPI.saveLastOpenedWorkspaces(workspacePaths)
+        .catch(err => console.error('Failed to save open workspaces:', err));
+    }
+  }, [workspaces]);
 
   const handleFileClick = async (filePath: string) => {
     if (!activeWorkspace) return;
@@ -352,7 +566,12 @@ function App() {
 
   // Generate PDF
   const handleGeneratePDF = async () => {
-    if (!activeWorkspace || !selectedXmlFile || !selectedXslFile) {
+    // Use refs to access current state (important for event handlers)
+    const currentWorkspace = activeWorkspaceRef.current;
+    const currentXmlFile = selectedXmlFileRef.current;
+    const currentXslFile = selectedXslFileRef.current;
+
+    if (!currentWorkspace || !currentXmlFile || !currentXslFile) {
       alert('Please select both XML and XSL files');
       return;
     }
@@ -363,11 +582,11 @@ function App() {
       setShowLogs(true);
 
       // Build full paths
-      const xmlPath = `${activeWorkspace.path}\\${selectedXmlFile}`;
-      const xslPath = `${activeWorkspace.path}\\${selectedXslFile}`;
+      const xmlPath = `${currentWorkspace.path}\\${currentXmlFile}`;
+      const xslPath = `${currentWorkspace.path}\\${currentXslFile}`;
 
       // XSL folder is the directory containing the XSL file
-      const xslFolder = `${activeWorkspace.path}\\xsl`;
+      const xslFolder = `${currentWorkspace.path}\\xsl`;
 
       // Call IPC to generate PDF
       const result = await window.electronAPI.generatePdf(xmlPath, xslPath, xslFolder);
@@ -376,7 +595,7 @@ function App() {
         // Load the generated PDF with timestamp to prevent caching
         const timestamp = new Date().getTime();
         const newUrl = `file:///${result.outputPath.replace(/\\/g, '/')}?t=${timestamp}`;
-        setWorkspacePdfUrls(prev => new Map(prev).set(activeWorkspace.id, newUrl));
+        setWorkspacePdfUrls(prev => new Map(prev).set(currentWorkspace.id, newUrl));
       }
     } catch (error: any) {
       console.error('Error generating PDF:', error);
@@ -486,6 +705,68 @@ function App() {
               >
                 New PDF Workspace
               </button>
+              
+              {recentWorkspaces.length > 0 && (
+                <div className="recent-workspaces-container" style={{ 
+                  marginTop: '30px', 
+                  width: '600px', 
+                  maxWidth: '90%'
+                }}>
+                  <h3 style={{ 
+                    marginBottom: '12px', 
+                    color: '#cccccc',
+                    fontSize: '14px',
+                    fontWeight: 'normal',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    Recent Workspaces
+                  </h3>
+                  <div style={{
+                    border: '1px solid #3e3e3e',
+                    borderRadius: '4px',
+                    backgroundColor: '#252526',
+                    maxHeight: '400px',
+                    overflowY: 'auto',
+                    padding: '8px'
+                  }}>
+                    {recentWorkspaces.slice(0, 10).map((workspacePath, index) => {
+                      const workspaceName = workspacePath.split('\\').pop() || workspacePath;
+                      return (
+                        <div 
+                          key={index}
+                          className="recent-workspace-item"
+                          onClick={() => openWorkspaceByPath(workspacePath)}
+                          style={{
+                            padding: '12px 15px',
+                            marginBottom: index < recentWorkspaces.length - 1 ? '4px' : '0',
+                            backgroundColor: '#2d2d2d',
+                            border: '1px solid #3e3e3e',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#3e3e3e';
+                            e.currentTarget.style.borderColor = '#007acc';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#2d2d2d';
+                            e.currentTarget.style.borderColor = '#3e3e3e';
+                          }}
+                        >
+                          <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#ffffff', fontSize: '14px' }}>
+                            {workspaceName}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#999999', fontFamily: 'monospace' }}>
+                            {workspacePath}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           ) : showWorkspaceForm ? (
             // Workspace creation form
@@ -677,7 +958,20 @@ function App() {
                             <div className="panel-header">
                               <h4>SEARCH</h4>
                             </div>
-                            <p className="placeholder-text">Search functionality coming soon...</p>
+                            <div className="search-content">
+                              <input 
+                                type="text" 
+                                placeholder="Search files..." 
+                                className="search-input"
+                                disabled
+                                style={{ opacity: 0.5 }}
+                              />
+                              <p className="placeholder-text" style={{ marginTop: '20px' }}>
+                                🔍 File search functionality coming in a future update.
+                                <br /><br />
+                                For now, use the file explorer to navigate your workspace files.
+                              </p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -718,6 +1012,7 @@ function App() {
                           {activeFile && (
                             <div className="editor-container-monaco">
                               <Editor
+                                key={`${activeFile.path}-${editorReloadKey}`}
                                 height="100%"
                                 language="xml"
                                 theme="vs-dark"

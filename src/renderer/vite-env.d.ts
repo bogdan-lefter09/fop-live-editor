@@ -45,6 +45,18 @@ interface Window {
     onUpdateDownloaded?: (callback: (info: any) => void) => void;
     onUpdateProgress?: (callback: (progress: any) => void) => void;
     onUpdateError?: (callback: (error: string) => void) => void;
+
+    // File watcher functions
+    startFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
+    stopFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
+    onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => void;
+
+    // Global settings functions
+    getGlobalSettings: () => Promise<{ lastOpenedWorkspaces: string[]; recentWorkspaces: string[] }>;
+    saveLastOpenedWorkspaces: (workspacePaths: string[]) => Promise<{ success: boolean }>;
+    addRecentWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
+    getRecentWorkspaces: () => Promise<string[]>;
+    onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => void;
   };
   electron: {
     ipcRenderer: {
