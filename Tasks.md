@@ -36,7 +36,7 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 ### Search & Navigation
 - ✅ **Full-text Search**: Workspace-wide search with regex support, case-sensitive options
 - ✅ **Recent Workspaces**: List of recently opened workspaces in NoWorkspaceView
-- ✅ **Keyboard Shortcuts**: Ctrl+S for save
+- ✅ **Keyboard Shortcuts**: Ctrl+S for save, Delete for file deletion, F5 for refresh, Ctrl+W to close tabs
 
 ### Auto-Update
 - ✅ **Phase 10**: Auto-update functionality with electron-updater fully implemented
@@ -46,11 +46,9 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 ### 🔴 High Priority (Critical UX Improvements)
 
 1. **Move to Recycle Bin for File Deletion**
-   - **Status**: ❌ Not implemented
-   - **Current**: Permanent deletion using `fs.unlinkSync()`
-   - **Target**: Use `shell.trashItem()` to move files to Windows Recycle Bin
-   - **Impact**: Safety - allows users to recover accidentally deleted files
-   - **Complexity**: Low - single function replacement
+   - **Status**: ✅ Implemented
+   - **Implementation**: Changed from `fs.unlinkSync()` to `shell.trashItem()` in delete-file handler
+   - **Impact**: Safety - users can now recover accidentally deleted files from Windows Recycle Bin
    - **Location**: `src/main/main.ts` (delete-file handler)
 
 2. **Folder Operations (Create/Delete/Rename)**
@@ -62,19 +60,15 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **IPC Handlers**: `create-folder`, `delete-folder`, `rename-folder`
 
 3. **Delete Key Shortcut**
-   - **Status**: ❌ Not implemented
-   - **Current**: Only Ctrl+S keyboard shortcut exists
-   - **Target**: Press Delete key to delete selected file
+   - **Status**: ✅ Implemented
+   - **Implementation**: Added keyboard listener in FileExplorer, press Delete to delete selected file
    - **Impact**: Efficiency - much faster than right-click → Delete
-   - **Complexity**: Low - add keydown listener in FileExplorer
    - **Location**: `src/renderer/components/FileExplorer.tsx`
 
 4. **F5 Refresh Shortcut**
-   - **Status**: ❌ Not implemented
-   - **Current**: Must right-click folder → Refresh
-   - **Target**: Press F5 to refresh current folder/workspace
+   - **Status**: ✅ Implemented
+   - **Implementation**: Added keyboard listener in FileExplorer, press F5 to refresh workspace
    - **Impact**: Convenience - faster than context menu
-   - **Complexity**: Low - add keydown listener
    - **Location**: `src/renderer/components/FileExplorer.tsx`
 
 ### 🟡 Medium Priority (Important Enhancements)
@@ -112,11 +106,9 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Location**: New component `src/renderer/components/SettingsPanel.tsx`
 
 9. **Ctrl+W to Close Tabs**
-   - **Status**: ❌ Not implemented
-   - **Current**: Must click X on each tab
-   - **Target**: Ctrl+W to close current file tab
+   - **Status**: ✅ Implemented
+   - **Implementation**: Added keyboard listener in App.tsx, press Ctrl+W to close current file tab
    - **Impact**: Efficiency - faster tab management
-   - **Complexity**: Low - add keyboard shortcut handler
    - **Location**: `src/renderer/App.tsx`
 
 ### 🟢 Low Priority (Nice to Have)
@@ -163,11 +155,11 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 
 ## 💡 Implementation Recommendations
 
-**Quick Wins (Implement First):**
-- #1 (Recycle Bin) - Single line change, huge safety improvement
-- #3 (Delete Key) - Simple keyboard listener, immediate UX boost
-- #4 (F5 Refresh) - Simple keyboard listener
-- #9 (Ctrl+W Close Tab) - Simple keyboard listener
+**✅ Quick Wins (Completed):**
+- ✅ #1 (Recycle Bin) - Single line change, huge safety improvement
+- ✅ #3 (Delete Key) - Simple keyboard listener, immediate UX boost
+- ✅ #4 (F5 Refresh) - Simple keyboard listener
+- ✅ #9 (Ctrl+W Close Tab) - Simple keyboard listener
 
 **Next Steps (Medium Effort, High Value):**
 - #2 (Folder Operations) - Essential for organization

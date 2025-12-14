@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
@@ -812,10 +812,10 @@ ipcMain.handle('delete-file', async (_event, workspacePath: string, filePath: st
       throw new Error('Cannot delete file: path is outside workspace');
     }
 
-    // Delete file
-    fs.unlinkSync(fullPath);
+    // Move file to recycle bin instead of permanent deletion
+    await shell.trashItem(fullPath);
 
-    console.log('Successfully deleted file:', fullPath);
+    console.log('Successfully moved file to recycle bin:', fullPath);
 
     return {
       success: true,

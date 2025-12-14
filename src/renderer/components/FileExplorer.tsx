@@ -28,6 +28,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const [newFileName, setNewFileName] = useState('');
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; filePath: string; fileName: string }>({ show: false, filePath: '', fileName: '' });
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +56,30 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       renameInputRef.current.select();
     }
   }, [renamingFile]);
+
+  // Keyboard shortcuts (Delete and F5)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input field
+      if (isCreatingFile || renamingFile) return;
+
+      // Delete key - delete selected file
+      if (e.key === 'Delete' && selectedFile) {
+        e.preventDefault();
+        const fileName = selectedFile.replace('xml/', '').replace('xsl/', '');
+        setDeleteConfirm({ show: true, filePath: selectedFile, fileName });
+      }
+
+      // F5 key - refresh workspace
+      if (e.key === 'F5') {
+        e.preventDefault();
+        onFilesChanged();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedFile, isCreatingFile, renamingFile, onFilesChanged]);
 
   const handleFolderContextMenu = (e: React.MouseEvent, folderName: 'xml' | 'xsl') => {
     e.preventDefault();
@@ -268,9 +293,9 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           ) : (
             <div
               key={file}
-              className="file-tree-item file"
+              className={`file-tree-item file ${selectedFile === file ? 'selected' : ''}`}
               style={{ paddingLeft: '28px' }}
-              onClick={() => onFileClick(file)}
+              onClick={() => { setSelectedFile(file); onFileClick(file); }}
               onContextMenu={(e) => handleFileContextMenu(e, file)}
             >
               <span className="file-icon">📄</span> {file.replace('xml/', '')}
@@ -320,9 +345,9 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           ) : (
             <div
               key={file}
-              className="file-tree-item file"
+              className={`file-tree-item file ${selectedFile === file ? 'selected' : ''}`}
               style={{ paddingLeft: '28px' }}
-              onClick={() => onFileClick(file)}
+              onClick={() => { setSelectedFile(file); onFileClick(file); }}
               onContextMenu={(e) => handleFileContextMenu(e, file)}
             >
               <span className="file-icon">📄</span> {file.replace('xsl/', '')}

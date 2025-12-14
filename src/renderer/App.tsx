@@ -698,15 +698,24 @@ function AppContent() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S: Save file
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSaveFile();
+      }
+      
+      // Ctrl+W: Close current tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeWorkspace && openFiles.length > 0 && activeFileIndex >= 0) {
+          handleCloseFile(activeFileIndex);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeFileIndex, openFiles]);
+  }, [activeFileIndex, openFiles, activeWorkspace]);
 
   const handleToggleFileExplorer = () => {
     setShowFileExplorer(!showFileExplorer);

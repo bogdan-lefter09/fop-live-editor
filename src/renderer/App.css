@@ -322,6 +322,11 @@ body, html {
   background: #2a2d2e;
 }
 
+.file-tree-item.selected {
+  background: #37373d;
+  border-left: 2px solid #007acc;
+}
+
 .file-tree-item.folder {
   font-weight: 500;
 }
