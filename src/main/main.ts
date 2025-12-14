@@ -699,37 +699,33 @@ ipcMain.handle('start-file-watcher', async (_event, workspacePath: string) => {
       }
     });
 
-    let debounceTimer: NodeJS.Timeout | null = null;
+    const fileDebounceTimers = new Map<string, NodeJS.Timeout>();
 
     const handleFileChange = (filePath: string) => {
       console.log('File changed:', filePath);
       
-      // Clear existing timer
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
+      // Clear existing timer for this specific file
+      const existingTimer = fileDebounceTimers.get(filePath);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
       }
 
-      // Set new debounced generation
-      debounceTimer = setTimeout(() => {
+      // Set new debounced generation for this file
+      const debounceTimer = setTimeout(() => {
         if (mainWindow) {
           mainWindow.webContents.send('file-changed', { workspacePath, filePath });
         }
+        fileDebounceTimers.delete(filePath);
       }, 500); // 500ms debounce
 
-      // Update the stored timer
-      const watcherData = workspaceWatchers.get(workspacePath);
-      if (watcherData) {
-        watcherData.debounceTimer = debounceTimer;
-      }
+      fileDebounceTimers.set(filePath, debounceTimer);
     };
 
     watcher
       .on('change', handleFileChange)
-      .on('add', handleFileChange)
-      .on('unlink', handleFileChange)
       .on('error', (error) => console.error('Watcher error:', error));
 
-    workspaceWatchers.set(workspacePath, { watcher, debounceTimer });
+    workspaceWatchers.set(workspacePath, { watcher, debounceTimer: null });
     console.log('File watcher started for:', workspacePath);
 
     return { success: true };
