@@ -54,6 +54,18 @@ interface Window {
       success: boolean;
       deletedPath: string;
     }>;
+    searchWorkspace: (workspacePath: string, searchQuery: string, options: { caseSensitive: boolean; useRegex: boolean }) => Promise<{
+      success: boolean;
+      results: Array<{
+        file: string;
+        matches: Array<{
+          line: number;
+          column: number;
+          text: string;
+          matchText: string;
+        }>;
+      }>;
+    }>;
 
     // Update functions
     checkForUpdates?: () => Promise<{ available: boolean; updateInfo?: any; message?: string; error?: string }>;

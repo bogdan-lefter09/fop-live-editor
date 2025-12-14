@@ -7,7 +7,7 @@ import { NoWorkspaceView } from './components/NoWorkspaceView';
 import { Toolbar } from './components/Toolbar';
 import { IconBar } from './components/IconBar';
 import { FileExplorer } from './components/FileExplorer';
-import { SearchPanel } from './components/SearchPanel';
+import { SearchPanel, SearchResult } from './components/SearchPanel';
 import { EditorPane } from './components/EditorPane';
 import { PdfViewer } from './components/PdfViewer';
 import { LogPanel } from './components/LogPanel';
@@ -66,6 +66,15 @@ function AppContent() {
   const [updateDownloaded, setUpdateDownloaded] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+
+  // State for search panel (persisted across panel toggles)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchUseRegex, setSearchUseRegex] = useState(false);
+  const [searchIsSearching, setSearchIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchError, setSearchError] = useState('');
+  const [searchExpandedFiles, setSearchExpandedFiles] = useState<Set<string>>(new Set());
 
   // Keep refs up to date
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces, workspacesRef]);
@@ -812,7 +821,26 @@ function AppContent() {
                               onFileDeleted={handleFileDeleted}
                             />
                           )}
-                          {showSearch && <SearchPanel />}
+                          {showSearch && (
+                            <SearchPanel 
+                              workspace={workspace}
+                              onFileClick={handleFileClick}
+                              searchQuery={searchQuery}
+                              setSearchQuery={setSearchQuery}
+                              caseSensitive={searchCaseSensitive}
+                              setCaseSensitive={setSearchCaseSensitive}
+                              useRegex={searchUseRegex}
+                              setUseRegex={setSearchUseRegex}
+                              isSearching={searchIsSearching}
+                              setIsSearching={setSearchIsSearching}
+                              results={searchResults}
+                              setResults={setSearchResults}
+                              error={searchError}
+                              setError={setSearchError}
+                              expandedFiles={searchExpandedFiles}
+                              setExpandedFiles={setSearchExpandedFiles}
+                            />
+                          )}
                         </div>
                       )}
 

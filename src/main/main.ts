@@ -827,6 +827,110 @@ ipcMain.handle('delete-file', async (_event, workspacePath: string, filePath: st
   }
 });
 
+// Search workspace files
+ipcMain.handle('search-workspace', async (_event, workspacePath: string, searchQuery: string, options: { caseSensitive: boolean; useRegex: boolean }) => {
+  try {
+    const results: Array<{
+      file: string;
+      matches: Array<{
+        line: number;
+        column: number;
+        text: string;
+        matchText: string;
+      }>;
+    }> = [];
+
+    const xmlFolder = path.join(workspacePath, 'xml');
+    const xslFolder = path.join(workspacePath, 'xsl');
+
+    // Function to search in a file
+    const searchFile = (filePath: string, relativePath: string) => {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n');
+        const fileMatches: Array<{
+          line: number;
+          column: number;
+          text: string;
+          matchText: string;
+        }> = [];
+
+        let searchPattern: RegExp;
+        if (options.useRegex) {
+          try {
+            searchPattern = new RegExp(searchQuery, options.caseSensitive ? 'g' : 'gi');
+          } catch (e) {
+            // Invalid regex, treat as literal text
+            const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            searchPattern = new RegExp(escapedQuery, options.caseSensitive ? 'g' : 'gi');
+          }
+        } else {
+          const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          searchPattern = new RegExp(escapedQuery, options.caseSensitive ? 'g' : 'gi');
+        }
+
+        lines.forEach((lineText, lineIndex) => {
+          let match;
+          searchPattern.lastIndex = 0; // Reset regex state
+          
+          while ((match = searchPattern.exec(lineText)) !== null) {
+            fileMatches.push({
+              line: lineIndex + 1,
+              column: match.index + 1,
+              text: lineText.trim(),
+              matchText: match[0]
+            });
+            
+            // Prevent infinite loop for zero-width matches
+            if (match.index === searchPattern.lastIndex) {
+              searchPattern.lastIndex++;
+            }
+          }
+        });
+
+        if (fileMatches.length > 0) {
+          results.push({
+            file: relativePath,
+            matches: fileMatches
+          });
+        }
+      } catch (error) {
+        console.error(`Error searching file ${filePath}:`, error);
+      }
+    };
+
+    // Recursively search directory
+    const searchDirectory = (dirPath: string, folderName: string) => {
+      if (!fs.existsSync(dirPath)) return;
+
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          searchDirectory(fullPath, folderName);
+        } else if (entry.isFile() && (entry.name.endsWith('.xml') || entry.name.endsWith('.xsl') || entry.name.endsWith('.xslt'))) {
+          const relativePath = path.relative(workspacePath, fullPath).replace(/\\/g, '/');
+          searchFile(fullPath, relativePath);
+        }
+      }
+    };
+
+    // Search both folders
+    searchDirectory(xmlFolder, 'xml');
+    searchDirectory(xslFolder, 'xsl');
+
+    return {
+      success: true,
+      results
+    };
+  } catch (error: any) {
+    console.error('Error searching workspace:', error);
+    throw error;
+  }
+});
+
 // Generate PDF with FOP Server
 ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, xslFolder: string) => {
   try {
