@@ -69,10 +69,13 @@ export const EditorPane = ({
             onChange={onEditorChange}
             onMount={onEditorMount}
             options={{
-              minimap: { enabled: true },
+              minimap: { enabled: false },
               fontSize: 14,
               wordWrap: 'on',
               automaticLayout: true,
+              guides: {
+                indentation: false,
+              },
             }}
           />
         </div>

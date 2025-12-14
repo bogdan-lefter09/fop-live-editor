@@ -365,3 +365,14 @@ Kill previous child process before spawning a new one to avoid concurrent FOP jo
 Send the generated PDF as a binary buffer via IPC to the renderer to avoid file:// CORS problems when loading in PDF.js.
 Keep bundled resources outside asar or use asarUnpack/extraResources so java.exe and fop.jar are executable.
 On Windows, anti-virus / Windows Defender can flag bundled executables — test on clean machines and consider documenting install steps for users.
+
+## Known Issues
+
+### Monaco Editor Find Widget Button Alignment
+**Issue:** When pressing Ctrl+F in the Monaco editor, the find bar appears but the toggle buttons (case sensitive, whole word, regex) are misaligned vertically. The buttons appear slightly below the find input box instead of being properly centered with it.
+
+**Status:** Unresolved - CSS fixes attempted but did not solve the alignment issue.
+
+**Workaround:** None currently - the find functionality still works, but the visual alignment is incorrect.
+
+**Next Steps:** This may require investigating Monaco Editor's internal CSS structure or potentially filing an issue with the `@monaco-editor/react` package to understand the proper way to override the default styling.
