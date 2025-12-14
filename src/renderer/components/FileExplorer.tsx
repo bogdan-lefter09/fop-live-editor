@@ -82,6 +82,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     });
   };
 
+  const handleRefreshClick = async () => {
+    setContextMenu({ show: false, x: 0, y: 0, folderName: null, filePath: null, type: 'folder' });
+    // Trigger rescan of workspace files
+    onFilesChanged();
+  };
+
   const handleNewFileClick = () => {
     const targetFolder = contextMenu.folderName;
     setContextMenu({ show: false, x: 0, y: 0, folderName: null, filePath: null, type: 'folder' });
@@ -349,9 +355,14 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           onClick={(e) => e.stopPropagation()}
         >
           {contextMenu.type === 'folder' && (
-            <div className="context-menu-item" onClick={handleNewFileClick}>
-              New File
-            </div>
+            <>
+              <div className="context-menu-item" onClick={handleNewFileClick}>
+                New File
+              </div>
+              <div className="context-menu-item" onClick={handleRefreshClick}>
+                Refresh
+              </div>
+            </>
           )}
           {contextMenu.type === 'file' && (
             <>

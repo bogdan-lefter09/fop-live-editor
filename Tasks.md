@@ -528,6 +528,81 @@ Phase 7d — File Deletion via Context Menu
 - Delete keyboard shortcut (Delete key when file selected)
 - Drag to recycle bin for deletion
 
+Phase 7e — Folder Refresh via Context Menu
+
+**Feature:** Allow users to refresh folder contents when files are added or modified externally, similar to VS Code.
+
+**Behavior:**
+1. Right-click on a folder (xml/ or xsl/) in the file explorer
+2. Context menu appears with options:
+   - "Refresh" - Rescan the folder to detect external changes
+   - (Other options: "New File", etc.)
+3. Refresh flow:
+   - Trigger a rescan of the workspace files
+   - Update the file explorer to show new/removed files
+   - Update toolbar comboboxes (XML/XSL file dropdowns) with new files
+   - No loading indicator needed if scan is fast (<100ms)
+   - Optional: Show brief toast notification "Folder refreshed"
+
+**Use Cases:**
+- User adds files to workspace folder via Windows Explorer
+- User modifies folder structure outside the application
+- User copies files from another location
+- External tools generate files in the workspace
+- Version control operations (git pull, git checkout)
+- Syncing files from cloud storage (OneDrive, Dropbox)
+
+**UI/UX:**
+- Context menu appears at cursor position on right-click
+- "Refresh" option appears for folders (xml/ and xsl/)
+- Keyboard shortcut: F5 when folder is selected (optional)
+- Instant refresh with no blocking UI
+- File explorer updates smoothly without losing scroll position
+- If currently viewing a file list, maintain selection if possible
+
+**Implementation:**
+- Extend context menu component in FileExplorer to show "Refresh" option for folders
+- Add refresh handler that calls existing `onFilesChanged` callback
+- Main process already has `scan-workspace-files` IPC handler - reuse it
+- No new IPC handler needed - just call existing scan function
+- Renderer:
+  - Call `window.electronAPI.scanWorkspaceFiles(workspace.path)`
+  - Update `workspaceFiles` state with new results
+  - File explorer automatically re-renders with updated file list
+  - Toolbar comboboxes automatically update via useEffect
+
+**Technical Details:**
+- Reuse existing `scan-workspace-files` IPC handler (already implemented)
+- No need for additional backend code
+- Lightweight operation - just re-reading directory structure
+- Non-blocking - scan happens asynchronously
+- Preserve UI state:
+  - Keep expanded/collapsed folder states if possible
+  - Maintain scroll position in file explorer
+  - Don't close open files or affect editor state
+- Update both file explorer and toolbar dropdowns atomically
+
+**Edge Cases:**
+- Folder being refreshed is currently expanded → keep it expanded
+- File being edited was deleted externally → show warning, mark as missing
+- File being edited was modified externally → detect conflict, offer to reload
+- New files appear → add to list in alphabetical order
+- Files removed → remove from list, close tabs if open
+
+**Performance:**
+- Scanning XML and XSL folders typically takes <50ms
+- Debounce multiple refresh requests (if user spams F5)
+- Cache directory structure for 1-2 seconds to avoid redundant scans
+- No need for progress indicator for typical workspace sizes (<1000 files)
+
+**Future Enhancements:**
+- Auto-refresh: Watch for external file system changes automatically
+- Keyboard shortcut: F5 or Ctrl+R to refresh current folder
+- Refresh entire workspace (both xml/ and xsl/ folders at once)
+- Show diff of what changed (X files added, Y files removed)
+- Smart refresh: Only rescan folders that have external changes
+- Notification: "3 new files detected" toast message
+
 Phase 8 — Dev workflow
 
 Development commands:
