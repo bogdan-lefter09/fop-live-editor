@@ -568,7 +568,6 @@ function AppContent() {
 
     try {
       setLogs('');
-      setShowLogs(true);
 
       const xmlPath = `${currentWorkspace.path}\\${currentXmlFile}`;
       const xslPath = `${currentWorkspace.path}\\${currentXslFile}`;

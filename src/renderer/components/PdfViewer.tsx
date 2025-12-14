@@ -10,6 +10,7 @@ export const PdfViewer = ({ pdfUrl, workspaceName, logs }: PdfViewerProps) => {
       <div className="pdf-viewer">
         {pdfUrl ? (
           <iframe
+            key={pdfUrl}
             src={pdfUrl}
             style={{ width: '100%', height: '100%', border: 'none' }}
             title={`PDF Preview - ${workspaceName}`}
