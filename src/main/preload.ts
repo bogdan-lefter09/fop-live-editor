@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFile: (filePath: string) => ipcRenderer.invoke('read-file', filePath),
   saveFile: (filePath: string, content: string) => ipcRenderer.invoke('save-file', filePath, content),
   createWorkspace: (parentFolder: string, workspaceName: string) => ipcRenderer.invoke('create-workspace', parentFolder, workspaceName),
+  openFolderAsWorkspace: (folderPath: string) => ipcRenderer.invoke('open-folder-as-workspace', folderPath),
   scanWorkspaceFiles: (workspacePath: string) => ipcRenderer.invoke('scan-workspace-files', workspacePath),
   loadWorkspaceSettings: (workspacePath: string) => ipcRenderer.invoke('load-workspace-settings', workspacePath),
   saveWorkspaceSettings: (workspacePath: string, settings: any) => ipcRenderer.invoke('save-workspace-settings', workspacePath, settings),
@@ -46,5 +47,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentWorkspaces: () => ipcRenderer.invoke('get-recent-workspaces'),
   onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => {
     ipcRenderer.on('restore-workspaces', (_event, workspacePaths) => callback(workspacePaths));
+  },
+
+  // Menu event listeners
+  onMenuNewWorkspace: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu-new-workspace', handler);
+    return () => ipcRenderer.removeListener('menu-new-workspace', handler);
+  },
+  onMenuOpenFolder: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu-open-folder', handler);
+    return () => ipcRenderer.removeListener('menu-open-folder', handler);
   },
 });

@@ -903,15 +903,6 @@ body, html {
   }
 }
 
-.btn-primary {
-  background: #0e639c !important;
-  color: white !important;
-}
-
-.btn-primary:hover {
-  background: #1177bb !important;
-}
-
 .btn-success {
   background: #2e7d32 !important;
   color: white !important;
@@ -942,6 +933,18 @@ body, html {
   color: #cccccc;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
 }
 
 .toolbar-group select {

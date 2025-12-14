@@ -64,7 +64,7 @@ export const WorkspaceTabBar = ({
       <button
         className="workspace-tab-new"
         onClick={onNewWorkspace}
-        title="New PDF Workspace"
+        title="New Workspace"
       >
         +
       </button>

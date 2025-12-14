@@ -260,6 +260,50 @@ Located at: `{workspaceFolder}\.fop-editor-workspace.json`
 - Validate by running `java -version` or `java -jar fop.jar --version`
 - Recent workspaces list (click to reopen)
 - On startup: if bundled JRE/FOP exist, use them by default; restore last opened workspaces
+
+Phase 7a — Open Existing Folder as Workspace
+
+**Feature:** Allow users to open an existing folder as a workspace, even if it wasn't created through the app's "New PDF Workspace" flow.
+
+**Behavior:**
+1. Add "Open Folder as Workspace" option in File menu and/or main button area
+2. User browses and selects an existing folder
+3. Main process scans the selected folder:
+   - Look for `xml/` subfolder
+   - Look for `xsl/` subfolder
+   - Look for `.fop-editor-workspace.json` file
+   - Ignore all other files and folders
+4. Folder structure setup:
+   - If `xml/` folder missing -> create it
+   - If `xsl/` folder missing -> create it
+   - Result: Every opened workspace will have both xml/ and xsl/ folders
+5. Workspace file handling:
+   - If `.fop-editor-workspace.json` exists -> load settings from it
+   - If missing -> create new workspace file with default values:
+     ```json
+     {
+       "workspaceName": "{folder name}",
+       "selectedXmlFile": null,
+       "selectedXslFile": null,
+       "autoGenerate": false,
+       "openFiles": []
+     }
+     ```
+6. Open the folder as a workspace tab with loaded/generated settings
+7. Add folder path to recent workspaces list
+
+**Implementation:**
+- Add IPC handler: `open-folder-as-workspace`
+- Validate folder structure (check for xml/ and xsl/ existence)
+- Read or create `.fop-editor-workspace.json`
+- Reuse existing workspace opening logic to display in UI
+- Update recent workspaces in global settings
+
+**Use Cases:**
+- Opening workspaces created manually outside the app
+- Opening workspaces from other machines or shared drives
+- Opening legacy project folders that follow the xml/xsl structure
+
 Phase 8 — Dev workflow
 
 Development commands:

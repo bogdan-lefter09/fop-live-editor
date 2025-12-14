@@ -44,7 +44,7 @@ export const WorkspaceForm = ({ onCreateWorkspace, onCancel, showCancel }: Works
       width: '100%'
     }}>
       <div style={{ maxWidth: '600px', width: '100%' }}>
-        <h2>Create PDF Workspace</h2>
+        <h2>Create Workspace</h2>
 
       <div className="form-group">
         <label>Folder Location:</label>
@@ -75,7 +75,7 @@ export const WorkspaceForm = ({ onCreateWorkspace, onCancel, showCancel }: Works
           onClick={handleSubmit}
           disabled={!workspaceFolder || !workspaceName.trim()}
         >
-          Create PDF Workspace
+          Create Workspace
         </button>
         {showCancel && (
           <button

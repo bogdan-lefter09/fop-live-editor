@@ -176,20 +176,66 @@ function AppContent() {
     });
   }, []);
 
+  const handleOpenFolderAsWorkspace = async () => {
+    try {
+      // Ask user to select a folder
+      const folderPath = await window.electronAPI.selectFolder();
+      
+      if (!folderPath) {
+        return; // User cancelled
+      }
+
+      // Check if workspace is already open
+      const isAlreadyOpen = workspaces.some(w => w.path === folderPath);
+
+      if (isAlreadyOpen) {
+        alert('This workspace is already open');
+        // Switch to existing workspace
+        const existingWorkspace = workspaces.find(w => w.path === folderPath);
+        if (existingWorkspace) {
+          setActiveWorkspaceId(existingWorkspace.id);
+        }
+        return;
+      }
+
+      // Call IPC to validate/setup folder as workspace
+      const result = await window.electronAPI.openFolderAsWorkspace(folderPath);
+
+      if (result.success) {
+        // Create new workspace object
+        const newWorkspace: Workspace = {
+          id: Date.now().toString(),
+          name: result.workspaceName,
+          path: result.workspacePath
+        };
+
+        setWorkspaces([...workspaces, newWorkspace]);
+        setActiveWorkspaceId(newWorkspace.id);
+
+        // Add to recent workspaces
+        await window.electronAPI.addRecentWorkspace(result.workspacePath);
+      }
+    } catch (error: any) {
+      alert(`Failed to open folder as workspace: ${error.message}`);
+      console.error('Error opening folder as workspace:', error);
+    }
+  };
+
   // Listen for menu events
   useEffect(() => {
     const handleNewWorkspace = () => {
       setShowWorkspaceForm(true);
+      setActiveWorkspaceId(null);
     };
 
-    if (window.electron && window.electron.ipcRenderer) {
-      window.electron.ipcRenderer.on('menu-new-workspace', handleNewWorkspace);
+    const cleanupNewWorkspace = window.electronAPI.onMenuNewWorkspace?.(handleNewWorkspace);
+    const cleanupOpenFolder = window.electronAPI.onMenuOpenFolder?.(handleOpenFolderAsWorkspace);
 
-      return () => {
-        window.electron.ipcRenderer.removeListener('menu-new-workspace', handleNewWorkspace);
-      };
-    }
-  }, [setShowWorkspaceForm]);
+    return () => {
+      cleanupNewWorkspace?.();
+      cleanupOpenFolder?.();
+    };
+  }, [handleOpenFolderAsWorkspace]);
 
   const handleDownloadUpdate = async () => {
     setIsDownloading(true);
@@ -610,6 +656,7 @@ function AppContent() {
                 setActiveWorkspaceId(null);
               }}
               onOpenWorkspace={openWorkspaceByPath}
+              onOpenFolder={handleOpenFolderAsWorkspace}
             />
           </div>
         ) : showWorkspaceForm && activeWorkspaceId === null ? (
@@ -629,9 +676,10 @@ function AppContent() {
                   <div
                     key={workspace.id}
                     style={{
-                      display: isActive ? 'contents' : 'none',
-                      gridColumn: '1 / -1',
-                      height: '100%'
+                      display: isActive ? 'flex' : 'none',
+                      flexDirection: 'column',
+                      height: '100%',
+                      overflow: 'hidden'
                     }}
                   >
                     <Toolbar
@@ -645,7 +693,7 @@ function AppContent() {
                       onGeneratePDF={handleGeneratePDF}
                     />
 
-                    <div className="workspace-layout" style={{ display: isActive ? 'flex' : 'none' }}>
+                    <div className="workspace-layout" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                       <IconBar
                         showFileExplorer={showFileExplorer}
                         showSearch={showSearch}

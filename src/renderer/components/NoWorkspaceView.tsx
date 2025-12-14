@@ -2,9 +2,10 @@ interface NoWorkspaceViewProps {
   recentWorkspaces: string[];
   onNewWorkspace: () => void;
   onOpenWorkspace: (workspacePath: string) => void;
+  onOpenFolder: () => void;
 }
 
-export const NoWorkspaceView = ({ recentWorkspaces, onNewWorkspace, onOpenWorkspace }: NoWorkspaceViewProps) => {
+export const NoWorkspaceView = ({ recentWorkspaces, onNewWorkspace, onOpenWorkspace, onOpenFolder }: NoWorkspaceViewProps) => {
   return (
     <div className="no-workspace-state" style={{ 
       display: 'flex', 
@@ -14,12 +15,20 @@ export const NoWorkspaceView = ({ recentWorkspaces, onNewWorkspace, onOpenWorksp
       width: '100%',
       height: '100%'
     }}>
-      <button
-        className="btn btn-primary btn-large"
-        onClick={onNewWorkspace}
-      >
-        New PDF Workspace
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'stretch', width: '220px' }}>
+        <button
+          className="btn btn-primary btn-large"
+          onClick={onNewWorkspace}
+        >
+          New Workspace
+        </button>
+        <button
+          className="btn btn-secondary btn-large"
+          onClick={onOpenFolder}
+        >
+          Open Folder
+        </button>
+      </div>
       
       {recentWorkspaces.length > 0 && (
         <div className="recent-workspaces-container" style={{ 

@@ -22,6 +22,11 @@ interface Window {
       workspacePath: string;
       message?: string;
     }>;
+    openFolderAsWorkspace: (folderPath: string) => Promise<{
+      success: boolean;
+      workspacePath: string;
+      workspaceName: string;
+    }>;
     scanWorkspaceFiles: (workspacePath: string) => Promise<{
       xml: string[];
       xsl: string[];
@@ -57,6 +62,10 @@ interface Window {
     addRecentWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
     getRecentWorkspaces: () => Promise<string[]>;
     onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => void;
+
+    // Menu event listeners
+    onMenuNewWorkspace: (callback: () => void) => (() => void);
+    onMenuOpenFolder: (callback: () => void) => (() => void);
   };
   electron: {
     ipcRenderer: {

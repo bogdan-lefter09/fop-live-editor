@@ -74,11 +74,20 @@ function createApplicationMenu() {
       label: 'File',
       submenu: [
         {
-          label: 'New PDF Workspace',
+          label: 'New Workspace',
           accelerator: 'CmdOrCtrl+N',
           click: () => {
             if (mainWindow) {
               mainWindow.webContents.send('menu-new-workspace');
+            }
+          }
+        },
+        {
+          label: 'Open Folder as Workspace',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-open-folder');
             }
           }
         },
@@ -577,6 +586,60 @@ ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspac
     };
   } catch (error: any) {
     console.error('Error creating workspace:', error);
+    throw error;
+  }
+});
+
+// Open existing folder as workspace
+ipcMain.handle('open-folder-as-workspace', async (_event, folderPath: string) => {
+  try {
+    if (!folderPath) {
+      throw new Error('Folder path is required');
+    }
+
+    // Check if folder exists
+    if (!fs.existsSync(folderPath)) {
+      throw new Error('Selected folder does not exist');
+    }
+
+    // Ensure xml/ and xsl/ folders exist (create if missing)
+    const xmlFolder = path.join(folderPath, 'xml');
+    const xslFolder = path.join(folderPath, 'xsl');
+    
+    if (!fs.existsSync(xmlFolder)) {
+      fs.mkdirSync(xmlFolder, { recursive: true });
+      console.log('Created xml/ folder');
+    }
+    
+    if (!fs.existsSync(xslFolder)) {
+      fs.mkdirSync(xslFolder, { recursive: true });
+      console.log('Created xsl/ folder');
+    }
+
+    // Check for workspace config file
+    const configPath = path.join(folderPath, '.fop-editor-workspace.json');
+    
+    if (!fs.existsSync(configPath)) {
+      // Create default workspace config
+      const folderName = path.basename(folderPath);
+      const workspaceConfig = {
+        workspaceName: folderName,
+        selectedXmlFile: null,
+        selectedXslFile: null,
+        autoGenerate: false,
+        openFiles: []
+      };
+      fs.writeFileSync(configPath, JSON.stringify(workspaceConfig, null, 2), 'utf-8');
+      console.log('Created .fop-editor-workspace.json with default settings');
+    }
+
+    return {
+      success: true,
+      workspacePath: folderPath,
+      workspaceName: path.basename(folderPath)
+    };
+  } catch (error: any) {
+    console.error('Error opening folder as workspace:', error);
     throw error;
   }
 });
