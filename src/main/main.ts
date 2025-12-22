@@ -466,34 +466,54 @@ ipcMain.handle('scan-workspace-files', async (_event, workspacePath: string) => 
     const xmlFolder = path.join(workspacePath, 'xml');
     const xslFolder = path.join(workspacePath, 'xsl');
 
-    const xmlFiles: string[] = [];
-    const xslFiles: string[] = [];
+    // Recursive function to scan a folder and build tree structure
+    const scanFolderRecursive = (folderPath: string): any[] => {
+      const items: any[] = [];
+      
+      if (!fs.existsSync(folderPath)) {
+        return items;
+      }
 
-    // Scan XML folder
-    if (fs.existsSync(xmlFolder)) {
-      const files = fs.readdirSync(xmlFolder);
-      for (const file of files) {
-        const filePath = path.join(xmlFolder, file);
-        if (fs.statSync(filePath).isFile() && file.endsWith('.xml')) {
-          xmlFiles.push(`xml/${file}`);
+      const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const entryPath = path.join(folderPath, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recursively scan subdirectory
+          const children = scanFolderRecursive(entryPath);
+          items.push({
+            name: entry.name,
+            path: entry.name, // Just the name, not full relative path
+            type: 'folder',
+            children: children
+          });
+        } else if (entry.isFile()) {
+          items.push({
+            name: entry.name,
+            path: entry.name, // Just the name, not full relative path
+            type: 'file'
+          });
         }
       }
-    }
 
-    // Scan XSL folder
-    if (fs.existsSync(xslFolder)) {
-      const files = fs.readdirSync(xslFolder);
-      for (const file of files) {
-        const filePath = path.join(xslFolder, file);
-        if (fs.statSync(filePath).isFile() && (file.endsWith('.xsl') || file.endsWith('.xslt'))) {
-          xslFiles.push(`xsl/${file}`);
+      // Sort: folders first, then files, both alphabetically
+      items.sort((a, b) => {
+        if (a.type === b.type) {
+          return a.name.localeCompare(b.name);
         }
-      }
-    }
+        return a.type === 'folder' ? -1 : 1;
+      });
+
+      return items;
+    };
+
+    const xmlItems = scanFolderRecursive(xmlFolder);
+    const xslItems = scanFolderRecursive(xslFolder);
 
     return {
-      xml: xmlFiles.sort(),
-      xsl: xslFiles.sort()
+      xml: xmlItems,
+      xsl: xslItems
     };
   } catch (error) {
     console.error('Error scanning workspace files:', error);
@@ -719,6 +739,86 @@ ipcMain.handle('create-file', async (_event, workspacePath: string, folderName: 
     };
   } catch (error: any) {
     console.error('Error creating file:', error);
+    throw error;
+  }
+});
+
+// Create folder
+ipcMain.handle('create-folder', async (_event, workspacePath: string, parentFolderPath: string, folderName: string) => {
+  try {
+    // Validate folder name
+    if (!folderName || folderName.trim() === '') {
+      throw new Error('Folder name cannot be empty');
+    }
+
+    // Check for invalid characters in folder name
+    const invalidChars = /[<>:"|?*\\/]/;
+    if (invalidChars.test(folderName)) {
+      throw new Error('Folder name contains invalid characters');
+    }
+
+    // Construct full folder path
+    const fullFolderPath = path.join(workspacePath, parentFolderPath, folderName);
+
+    // Check if folder already exists
+    if (fs.existsSync(fullFolderPath)) {
+      throw new Error('A folder with this name already exists');
+    }
+
+    // Create folder
+    fs.mkdirSync(fullFolderPath, { recursive: true });
+
+    console.log('Created folder:', fullFolderPath);
+
+    return {
+      success: true,
+      folderPath: path.join(parentFolderPath, folderName) // Return workspace-relative path
+    };
+  } catch (error: any) {
+    console.error('Error creating folder:', error);
+    throw error;
+  }
+});
+
+// Delete folder
+ipcMain.handle('delete-folder', async (_event, workspacePath: string, folderPath: string) => {
+  try {
+    // Prevent deletion of root xml and xsl folders
+    if (folderPath === 'xml' || folderPath === 'xsl') {
+      throw new Error('Cannot delete root xml or xsl folders');
+    }
+
+    // Validate that the path is within the workspace
+    const normalizedFolderPath = folderPath.replace(/\//g, path.sep);
+    const fullFolderPath = path.join(workspacePath, normalizedFolderPath);
+    
+    // Security check: ensure the path is within workspace
+    const relativePath = path.relative(workspacePath, fullFolderPath);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      throw new Error('Invalid folder path: outside workspace');
+    }
+
+    // Check if folder exists
+    if (!fs.existsSync(fullFolderPath)) {
+      throw new Error('Folder not found');
+    }
+
+    // Check if it's actually a folder
+    const stats = fs.statSync(fullFolderPath);
+    if (!stats.isDirectory()) {
+      throw new Error('Path is not a folder');
+    }
+
+    // Delete folder recursively
+    fs.rmSync(fullFolderPath, { recursive: true, force: true });
+
+    console.log('Deleted folder:', fullFolderPath);
+
+    return {
+      success: true
+    };
+  } catch (error: any) {
+    console.error('Error deleting folder:', error);
     throw error;
   }
 });

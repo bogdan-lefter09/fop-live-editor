@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadWorkspaceSettings: (workspacePath: string) => ipcRenderer.invoke('load-workspace-settings', workspacePath),
   saveWorkspaceSettings: (workspacePath: string, settings: any) => ipcRenderer.invoke('save-workspace-settings', workspacePath, settings),
   createFile: (workspacePath: string, folderName: string, fileName: string) => ipcRenderer.invoke('create-file', workspacePath, folderName, fileName),
+  createFolder: (workspacePath: string, parentFolderPath: string, folderName: string) => ipcRenderer.invoke('create-folder', workspacePath, parentFolderPath, folderName),
+  deleteFolder: (workspacePath: string, folderPath: string) => ipcRenderer.invoke('delete-folder', workspacePath, folderPath),
   renameFile: (workspacePath: string, oldRelativePath: string, newFileName: string) => ipcRenderer.invoke('rename-file', workspacePath, oldRelativePath, newFileName),
   deleteFile: (workspacePath: string, filePath: string) => ipcRenderer.invoke('delete-file', workspacePath, filePath),
   searchWorkspace: (workspacePath: string, searchQuery: string, options: { caseSensitive: boolean; useRegex: boolean }) => ipcRenderer.invoke('search-workspace', workspacePath, searchQuery, options),

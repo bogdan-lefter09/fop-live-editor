@@ -12,7 +12,14 @@ export interface OpenFile {
   originalContent: string;
 }
 
+export interface FileTreeItem {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  children?: FileTreeItem[];
+}
+
 export interface WorkspaceFiles {
-  xml: string[];
-  xsl: string[];
+  xml: FileTreeItem[];
+  xsl: FileTreeItem[];
 }

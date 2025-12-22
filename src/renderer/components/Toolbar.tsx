@@ -1,4 +1,4 @@
-import { WorkspaceFiles } from '../types';
+import { WorkspaceFiles, FileTreeItem } from '../types';
 
 interface ToolbarProps {
   workspaceFiles: WorkspaceFiles;
@@ -21,6 +21,27 @@ export const Toolbar = ({
   onToggleAutoGenerate,
   onGeneratePDF,
 }: ToolbarProps) => {
+  // Flatten the file tree to get all files
+  const flattenFileTree = (items: FileTreeItem[], rootFolder: string): string[] => {
+    const files: string[] = [];
+    
+    const traverse = (items: FileTreeItem[]) => {
+      for (const item of items) {
+        if (item.type === 'file') {
+          files.push(`${rootFolder}/${item.path}`);
+        } else if (item.type === 'folder' && item.children) {
+          traverse(item.children);
+        }
+      }
+    };
+    
+    traverse(items);
+    return files.sort();
+  };
+
+  const xmlFiles = flattenFileTree(workspaceFiles.xml, 'xml');
+  const xslFiles = flattenFileTree(workspaceFiles.xsl, 'xsl');
+
   return (
     <div className="workspace-toolbar">
       <div className="toolbar-group">
@@ -30,7 +51,7 @@ export const Toolbar = ({
           onChange={(e) => onSelectXmlFile(e.target.value)}
         >
           <option value="">Select XML file...</option>
-          {workspaceFiles.xml.map(file => (
+          {xmlFiles.map(file => (
             <option key={file} value={file}>{file.replace('xml/', '')}</option>
           ))}
         </select>
@@ -43,7 +64,7 @@ export const Toolbar = ({
           onChange={(e) => onSelectXslFile(e.target.value)}
         >
           <option value="">Select XSL file...</option>
-          {workspaceFiles.xsl.map(file => (
+          {xslFiles.map(file => (
             <option key={file} value={file}>{file.replace('xsl/', '')}</option>
           ))}
         </select>
