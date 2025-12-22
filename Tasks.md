@@ -116,6 +116,7 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Impact**: Flexibility - advanced users can customize environment
    - **Complexity**: Medium - new UI panel, validation logic
    - **Location**: New component `src/renderer/components/SettingsPanel.tsx`
+   - **Note**: FopServer.java is compiled with `--release 8` for maximum compatibility (Java 8+). Bundled JRE 21 runs Java 8 bytecode without issues. Custom JRE requires minimum Java 8.
 
 9. **Ctrl+W to Close Tabs**
    - **Status**: ✅ Implemented
