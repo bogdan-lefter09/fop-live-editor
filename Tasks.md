@@ -25,6 +25,9 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 - **Workspace System**: Multi-workspace tab support with `.fop-editor-workspace.json` configuration
 - **VS Code-style Interface**: Vertical icon bar with file explorer and search functionality
 - **Monaco Editor Integration**: VS Code editor component for XML/XSL editing
+- **Responsive Toolbar**: Toolbar wraps items to new line when window is not maximized
+- **Hierarchical File Display**: Nested folder paths shown correctly in comboboxes and file tabs
+- **PDF Error Feedback**: PDF viewer clears on generation failure to prevent displaying outdated PDFs
 
 ### Phase 7 Features (File/Workspace Management)
 - ✅ **Phase 7a**: Open Existing Folder as Workspace
