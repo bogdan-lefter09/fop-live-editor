@@ -32,8 +32,9 @@ body, html {
   border-bottom: 1px solid #3e3e42;
   padding: 0 8px;
   gap: 2px;
-  height: 36px;
+  min-height: 36px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .workspace-tab {
@@ -526,8 +527,9 @@ body, html {
   display: flex;
   background: #252526;
   border-bottom: 1px solid #3e3e42;
-  overflow-x: auto;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: 36px;
 }
 
 .inner-tab {
