@@ -1,36 +1,39 @@
 /// <reference types="vite/client" />
 
-interface Window {
-  electronAPI: {
-    ping: () => Promise<string>;
-    selectFolder: () => Promise<string | null>;
-    getFiles: (folderPath: string, extension: string) => Promise<string[]>;
-    readFile: (filePath: string) => Promise<string>;
-    saveFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
-    generatePdf: (xmlPath: string, xslPath: string, xslFolder: string) => Promise<{
-      success: boolean;
-      pdfBuffer: number[];
-      outputPath: string;
-      stdout: string;
-      stderr: string;
-    }>;
-    onGenerationLog: (callback: (log: string) => void) => (() => void);
+import type { FileTreeItem } from './types';
 
-    // Workspace functions
-    createWorkspace: (folderPath: string, workspaceName: string) => Promise<{
-      success: boolean;
-      workspacePath: string;
-      message?: string;
-    }>;
-    openFolderAsWorkspace: (folderPath: string) => Promise<{
-      success: boolean;
-      workspacePath: string;
-      workspaceName: string;
-    }>;
-    scanWorkspaceFiles: (workspacePath: string) => Promise<{
-      xml: string[];
-      xsl: string[];
-    }>;
+declare global {
+  interface Window {
+    electronAPI: {
+      ping: () => Promise<string>;
+      selectFolder: () => Promise<string | null>;
+      getFiles: (folderPath: string, extension: string) => Promise<string[]>;
+      readFile: (filePath: string) => Promise<string>;
+      saveFile: (filePath: string, content: string) => Promise<{ success: boolean }>;
+      generatePdf: (xmlPath: string, xslPath: string, xslFolder: string) => Promise<{
+        success: boolean;
+        pdfBuffer: number[];
+        outputPath: string;
+        stdout: string;
+        stderr: string;
+      }>;
+      onGenerationLog: (callback: (log: string) => void) => (() => void);
+
+      // Workspace functions
+      createWorkspace: (folderPath: string, workspaceName: string) => Promise<{
+        success: boolean;
+        workspacePath: string;
+        message?: string;
+      }>;
+      openFolderAsWorkspace: (folderPath: string) => Promise<{
+        success: boolean;
+        workspacePath: string;
+        workspaceName: string;
+      }>;
+      scanWorkspaceFiles: (workspacePath: string) => Promise<{
+        xml: FileTreeItem[];
+        xsl: FileTreeItem[];
+      }>;
     loadWorkspaceSettings: (workspacePath: string) => Promise<{
       workspaceName: string;
       selectedXmlFile: string;
@@ -112,3 +115,6 @@ interface Window {
     };
   };
 }
+}
+
+export {};

@@ -499,7 +499,8 @@ function AppContent() {
     // Normalize path separators - convert forward slashes to backslashes
     const normalizedFilePath = filePath.replace(/\//g, '\\');
     const fullPath = `${activeWorkspace.path}\\${normalizedFilePath}`;
-    const fileName = filePath.split(/[/\\]/).pop() || filePath;
+    // Display name: remove xml/ or xsl/ prefix but keep nested folder structure
+    const displayName = filePath.replace(/^(xml|xsl)[/\\]/, '');
 
     // Check if file is already open - use case-insensitive comparison with normalized separators
     const existingIndex = openFiles.findIndex(f => {
@@ -516,7 +517,7 @@ function AppContent() {
       const content = await window.electronAPI.readFile(fullPath);
       const newFile: OpenFile = {
         path: fullPath,
-        name: fileName,
+        name: displayName,
         content: content,
         isDirty: false,
         originalContent: content
@@ -563,7 +564,8 @@ function AppContent() {
     
     const oldFullPath = `${activeWorkspace.path}\\${normalizedOldPath}`;
     const newFullPath = `${activeWorkspace.path}\\${normalizedNewPath}`;
-    const newFileName = newPath.split(/[/\\]/).pop() || newPath;
+    // Display name: remove xml/ or xsl/ prefix but keep nested folder structure
+    const newDisplayName = newPath.replace(/^(xml|xsl)[/\\]/, '');
 
     // Update open files - use case-insensitive comparison and normalize separators
     const updatedFiles = openFiles.map(file => {
@@ -574,7 +576,7 @@ function AppContent() {
         return {
           ...file,
           path: newFullPath,
-          name: newFileName
+          name: newDisplayName
         };
       }
       return file;
@@ -633,7 +635,7 @@ function AppContent() {
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (activeFileIndex === -1 || !value) return;
+    if (activeFileIndex === -1 || value === undefined) return;
 
     const updatedFiles = [...openFiles];
     updatedFiles[activeFileIndex] = {
@@ -688,10 +690,23 @@ function AppContent() {
         const timestamp = new Date().getTime();
         const newUrl = `file:///${result.outputPath.replace(/\\/g, '/')}?t=${timestamp}`;
         setWorkspacePdfUrls(prev => new Map(prev).set(currentWorkspace.id, newUrl));
+      } else {
+        // Clear PDF viewer on generation failure
+        setWorkspacePdfUrls(prev => {
+          const next = new Map(prev);
+          next.delete(currentWorkspace.id);
+          return next;
+        });
       }
     } catch (error: any) {
       console.error('Error generating PDF:', error);
       setLogs(prev => prev + `\n\n✗ Error: ${error.message}\n`);
+      // Clear PDF viewer on error
+      setWorkspacePdfUrls(prev => {
+        const next = new Map(prev);
+        next.delete(currentWorkspace.id);
+        return next;
+      });
     }
   };
 

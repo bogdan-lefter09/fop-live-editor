@@ -514,12 +514,10 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           </div>
         );
       } else {
-        // File
-        const fileFullPath = `${rootFolder}/${item.path}`;
-        
-        if (renamingFile === fileFullPath) {
+        // File - use fullPath which already includes parent path
+        if (renamingFile === fullPath) {
           return (
-            <div key={fileFullPath} className="file-tree-item file-create" style={{ paddingLeft }}>
+            <div key={fullPath} className="file-tree-item file-create" style={{ paddingLeft }}>
               <span className="file-icon">📄</span>
               <input
                 ref={renameInputRef}
@@ -538,11 +536,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
         return (
           <div
-            key={fileFullPath}
-            className={`file-tree-item ${selectedFile === fileFullPath ? 'selected' : ''}`}
+            key={fullPath}
+            className={`file-tree-item ${selectedFile === fullPath ? 'selected' : ''}`}
             style={{ paddingLeft }}
-            onClick={() => { setSelectedFile(fileFullPath); onFileClick(fileFullPath); }}
-            onContextMenu={(e) => handleFileContextMenu(e, fileFullPath, rootFolder)}
+            onClick={() => { setSelectedFile(fullPath); onFileClick(fullPath); }}
+            onContextMenu={(e) => handleFileContextMenu(e, fullPath, rootFolder)}
           >
             <span className="file-icon">📄</span> {item.name}
           </div>

@@ -21,16 +21,18 @@ export const Toolbar = ({
   onToggleAutoGenerate,
   onGeneratePDF,
 }: ToolbarProps) => {
-  // Flatten the file tree to get all files
+  // Flatten the file tree to get all files with their relative paths
   const flattenFileTree = (items: FileTreeItem[], rootFolder: string): string[] => {
     const files: string[] = [];
     
-    const traverse = (items: FileTreeItem[]) => {
+    const traverse = (items: FileTreeItem[], parentPath: string = '') => {
       for (const item of items) {
         if (item.type === 'file') {
-          files.push(`${rootFolder}/${item.path}`);
+          const relativePath = parentPath ? `${parentPath}/${item.path}` : item.path;
+          files.push(`${rootFolder}/${relativePath}`);
         } else if (item.type === 'folder' && item.children) {
-          traverse(item.children);
+          const folderPath = parentPath ? `${parentPath}/${item.path}` : item.path;
+          traverse(item.children, folderPath);
         }
       }
     };
