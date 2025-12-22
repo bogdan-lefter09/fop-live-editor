@@ -32,6 +32,7 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 - ✅ **Phase 7c**: File Renaming via Context Menu
 - ✅ **Phase 7d**: File Deletion via Context Menu
 - ✅ **Phase 7e**: Folder Refresh via Context Menu
+- ✅ **Phase 7f**: Hierarchical Folder Structure with Create/Delete/Rename Operations
 
 ### Search & Navigation
 - ✅ **Full-text Search**: Workspace-wide search with regex support, case-sensitive options
@@ -52,12 +53,20 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Location**: `src/main/main.ts` (delete-file handler)
 
 2. **Folder Operations (Create/Delete/Rename)**
-   - **Status**: ❌ Not implemented
-   - **Current**: Can only create/rename/delete files, not folders
-   - **Target**: Add context menu options for folders (New Folder, Rename Folder, Delete Folder)
-   - **Impact**: Organization - users need to create folder structures within workspace
-   - **Complexity**: Medium - recursive operations for delete, path updates for rename
-   - **IPC Handlers**: `create-folder`, `delete-folder`, `rename-folder`
+   - **Status**: ✅ Implemented
+   - **Implementation**: 
+     - Hierarchical folder structure with unlimited nesting depth
+     - Create folders via context menu "New Folder" option
+     - Delete folders via context menu "Delete Folder" option (with confirmation dialog)
+     - Rename folders via context menu "Rename" option
+     - Root folder protection: xml/ and xsl/ folders cannot be deleted or renamed
+     - Auto-expand parent folder when creating new folders for visibility
+     - Recursive path updates for folder operations
+   - **Impact**: Organization - users can now create complex folder structures within workspace
+   - **IPC Handlers**: `create-folder`, `delete-folder`, `rename-folder` (all implemented)
+   - **Commits**: 
+     - "Implement hierarchical folder structure with create/delete operations and fix nested folder path bug"
+     - "Add folder rename functionality with root folder protection"
 
 3. **Delete Key Shortcut**
    - **Status**: ✅ Implemented
