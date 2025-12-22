@@ -28,6 +28,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [creatingFolderIn, setCreatingFolderIn] = useState<string | null>(null); // Full path where we're creating folder
   const [renamingFile, setRenamingFile] = useState<string | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [error, setError] = useState('');
@@ -37,6 +38,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameFolderInputRef = useRef<HTMLInputElement>(null);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -71,11 +73,19 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   }, [renamingFile]);
 
+  // Focus input when renaming folder
+  useEffect(() => {
+    if (renamingFolder && renameFolderInputRef.current) {
+      renameFolderInputRef.current.focus();
+      renameFolderInputRef.current.select();
+    }
+  }, [renamingFolder]);
+
   // Keyboard shortcuts (Delete and F5)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input field
-      if (isCreatingFile || isCreatingFolder || renamingFile) return;
+      if (isCreatingFile || isCreatingFolder || renamingFile || renamingFolder) return;
 
       // Delete key - delete selected file
       if (e.key === 'Delete' && selectedFile) {
@@ -180,6 +190,17 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   };
 
+  const handleRenameFolderClick = () => {
+    const folderPath = contextMenu.folderPath;
+    setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+    if (folderPath) {
+      setRenamingFolder(folderPath);
+      const folderName = folderPath.split('/').pop() || '';
+      setNewFolderName(folderName);
+      setError('');
+    }
+  };
+
   const handleCreateFile = async () => {
     if (!newFileName.trim() || !creatingInFolder) {
       setError('Filename cannot be empty');
@@ -248,6 +269,46 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   };
 
+  const handleRenameFolder = async () => {
+    if (!newFolderName.trim() || !renamingFolder) {
+      setError('Folder name cannot be empty');
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.renameFolder(workspace.path, renamingFolder, newFolderName);
+      if (result.success) {
+        // Update expanded folders if this folder was expanded
+        setExpandedFolders(prev => {
+          const next = new Set(prev);
+          if (next.has(result.oldPath)) {
+            next.delete(result.oldPath);
+            next.add(result.newPath);
+          }
+          // Update any child folder paths that were expanded
+          for (const expandedPath of Array.from(next)) {
+            if (expandedPath.startsWith(result.oldPath + '/')) {
+              next.delete(expandedPath);
+              const newPath = expandedPath.replace(result.oldPath, result.newPath);
+              next.add(newPath);
+            }
+          }
+          return next;
+        });
+
+        // Reset state
+        setRenamingFolder(null);
+        setNewFolderName('');
+        setError('');
+        
+        // Refresh file list
+        onFilesChanged();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to rename folder');
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -283,6 +344,17 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   };
 
+  const handleRenameFolderKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleRenameFolder();
+    } else if (e.key === 'Escape') {
+      setRenamingFolder(null);
+      setNewFolderName('');
+      setError('');
+    }
+  };
+
   const handleCancelCreate = () => {
     setTimeout(() => {
       setIsCreatingFile(false);
@@ -305,6 +377,14 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     setTimeout(() => {
       setRenamingFile(null);
       setNewFileName('');
+      setError('');
+    }, 200);
+  };
+
+  const handleCancelRenameFolder = () => {
+    setTimeout(() => {
+      setRenamingFolder(null);
+      setNewFolderName('');
       setError('');
     }, 200);
   };
@@ -360,6 +440,28 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
       if (item.type === 'folder') {
         const isExpanded = expandedFolders.has(fullPath);
+        
+        // Show inline rename input for folder
+        if (renamingFolder === fullPath) {
+          return (
+            <div key={fullPath}>
+              <div className="file-tree-item file-create" style={{ paddingLeft }}>
+                <span className="folder-icon">📁</span>
+                <input
+                  ref={renameFolderInputRef}
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={handleRenameFolderKeyDown}
+                  onBlur={handleCancelRenameFolder}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="file-name-input"
+                />
+                {error && <div className="file-create-error">{error}</div>}
+              </div>
+            </div>
+          );
+        }
         
         return (
           <div key={fullPath}>
@@ -564,11 +666,16 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
               <div className="context-menu-item" onClick={handleRefreshClick}>
                 Refresh
               </div>
-              {/* Show Delete only for non-root folders */}
+              {/* Show Rename and Delete only for non-root folders */}
               {contextMenu.folderPath !== 'xml' && contextMenu.folderPath !== 'xsl' && (
-                <div className="context-menu-item" onClick={handleDeleteFolderClick}>
-                  Delete
-                </div>
+                <>
+                  <div className="context-menu-item" onClick={handleRenameFolderClick}>
+                    Rename
+                  </div>
+                  <div className="context-menu-item" onClick={handleDeleteFolderClick}>
+                    Delete Folder
+                  </div>
+                </>
               )}
             </>
           )}

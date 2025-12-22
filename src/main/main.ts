@@ -823,6 +823,72 @@ ipcMain.handle('delete-folder', async (_event, workspacePath: string, folderPath
   }
 });
 
+// Rename folder
+ipcMain.handle('rename-folder', async (_event, workspacePath: string, oldFolderPath: string, newFolderName: string) => {
+  try {
+    // Prevent renaming of root xml and xsl folders
+    if (oldFolderPath === 'xml' || oldFolderPath === 'xsl') {
+      throw new Error('Cannot rename root xml or xsl folders');
+    }
+
+    // Validate new folder name
+    if (!newFolderName || newFolderName.trim() === '') {
+      throw new Error('Folder name cannot be empty');
+    }
+
+    // Check for invalid characters in folder name
+    const invalidChars = /[<>:"|?*\\/]/;
+    if (invalidChars.test(newFolderName)) {
+      throw new Error('Folder name contains invalid characters');
+    }
+
+    // Normalize the relative path
+    const normalizedOldPath = oldFolderPath.replace(/\//g, path.sep);
+    const oldFullPath = path.join(workspacePath, normalizedOldPath);
+    
+    // Get parent folder path
+    const parentFolder = path.dirname(oldFullPath);
+    const newFullPath = path.join(parentFolder, newFolderName);
+
+    // Check if old folder exists
+    if (!fs.existsSync(oldFullPath)) {
+      throw new Error('Folder not found');
+    }
+
+    // Check if it's actually a folder
+    const stats = fs.statSync(oldFullPath);
+    if (!stats.isDirectory()) {
+      throw new Error('Path is not a folder');
+    }
+
+    // Check if new folder name already exists
+    if (fs.existsSync(newFullPath) && oldFullPath !== newFullPath) {
+      throw new Error('A folder with this name already exists');
+    }
+
+    // Rename folder
+    fs.renameSync(oldFullPath, newFullPath);
+
+    // Build new relative path
+    const parentRelativePath = path.relative(workspacePath, parentFolder);
+    const newRelativePath = parentRelativePath ? `${parentRelativePath}${path.sep}${newFolderName}` : newFolderName;
+    
+    // Convert back to forward slashes for consistency
+    const newRelativePathNormalized = newRelativePath.replace(/\\/g, '/');
+
+    console.log('Successfully renamed folder:', oldFullPath, '->', newFullPath);
+
+    return {
+      success: true,
+      oldPath: oldFolderPath,
+      newPath: newRelativePathNormalized
+    };
+  } catch (error: any) {
+    console.error('Error renaming folder:', error);
+    throw error;
+  }
+});
+
 // Rename file
 ipcMain.handle('rename-file', async (_event, workspacePath: string, oldRelativePath: string, newFileName: string) => {
   try {
