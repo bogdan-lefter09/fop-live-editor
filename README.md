@@ -12,6 +12,10 @@ A desktop application for editing and previewing XSL-FO transformations in real-
 - ⚡ **Auto-generate** - Optional debounced PDF generation on file save
 - 🔄 **Auto-updates** - Built-in update notifications and installation
 
+## Download
+
+**[Download the latest release](https://github.com/bogdan-lefter09/fop-live-editor/releases)** - Windows x64 installer and portable ZIP available
+
 ## Prerequisites
 
 Before running this application, you need to download and set up the bundled resources:
