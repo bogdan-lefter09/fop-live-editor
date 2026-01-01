@@ -42,8 +42,8 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 - ✅ **Recent Workspaces**: List of recently opened workspaces in NoWorkspaceView
 - ✅ **Keyboard Shortcuts**: Ctrl+S for save, Delete for file deletion, F5 for refresh, Ctrl+W to close tabs
 
-### Auto-Update
-- ✅ **Phase 10**: Auto-update functionality with electron-updater fully implemented
+### Update Functionality
+- ✅ **Phase 10**: Update functionality with electron-updater fully implemented (user-initiated)
 
 ## 📋 Planned Features (Not Yet Implemented)
 
@@ -787,29 +787,30 @@ App size:
 Bundling JRE will increase installer size significantly (~50–100+ MB).
 Testing installer:
 Build and install on a clean Windows VM to verify bundled Java and FOP are found and run correctly.
-Phase 10 — Auto-update functionality
+Phase 10 — Update functionality
 
-Use electron-updater (built into electron-builder) to provide automatic updates.
+Use electron-updater (built into electron-builder) to provide application updates.
 Configure electron-builder to publish releases:
 Set publish configuration in electron-builder config (e.g., GitHub releases, S3, or custom server)
 Generate latest.yml manifest file during build (electron-builder does this automatically)
-Main process auto-update logic:
+Main process update logic:
 Import autoUpdater from electron-updater
 Check for updates on app startup
 Listen for update events: update-available, update-downloaded, error
 Notify renderer when update is available or downloaded
 Provide IPC handlers for: check-for-updates, download-update, quit-and-install
-User interaction:
+User interaction (manual trigger required):
 Show notification in UI when update is available (e.g., banner or dialog)
+User must click notification to proceed
 Provide "Download Update" and "Install and Restart" buttons
 Option to skip version or remind later
-Auto-download updates in background (configurable)
+Updates download only when user confirms (not automatic background download)
 Testing:
 Test update flow by creating a new release with higher version number
 Verify update download, installation, and version upgrade
 Test rollback scenario if update fails
 Security:
-Code-sign the application (required for Windows auto-updates to work smoothly)
+Code-sign the application (required for Windows updates to work smoothly)
 Verify update signatures to prevent tampering
 Use HTTPS for update server
 
