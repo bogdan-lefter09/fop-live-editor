@@ -4,11 +4,13 @@ A desktop application for editing and previewing XSL-FO transformations in real-
 
 ## Features
 
-- 📝 **Live Editing** - Edit XML and XSL files with syntax highlighting (CodeMirror)
-- 👁️ **PDF Preview** - Generate and preview PDF output instantly
-- 💾 **Auto-save** - Save with Ctrl+S, optional auto-generate on save
-- 📊 **Real-time Logs** - View FOP transformation output and errors
-- 🎨 **Modern UI** - Clean, responsive interface with split-panel layout
+- � **Workspace System** - Multi-workspace tabs with persistent settings
+- 📝 **Monaco Editor** - VS Code editor with XML/XSL syntax highlighting
+- 🗂️ **File Explorer** - Hierarchical folder structure with context menu operations
+- 👁️ **Live PDF Preview** - Persistent FOP server for fast generation (50-80% faster)
+- 🔍 **Full-text Search** - Workspace-wide search with regex support
+- ⚡ **Auto-generate** - Optional debounced PDF generation on file save
+- 🔄 **Auto-updates** - Built-in update notifications and installation
 
 ## Prerequisites
 
@@ -54,53 +56,23 @@ Download Apache FOP 2.11 binary distribution from [Apache FOP Downloads](https:/
 
 ## Usage
 
-1. **Select Folders:**
-   - Click "Browse..." to select your XML folder
-   - Click "Browse..." to select your XSL folder
-
-2. **Choose Files:**
-   - Select an XML file from the dropdown
-   - Select an XSL file from the dropdown
-
-3. **Edit:**
-   - Edit files in the CodeMirror editor
-   - Switch between XML and XSL tabs
-   - Save with the "Save" button or press `Ctrl+S`
-
-4. **Generate PDF:**
-   - Click "Generate PDF" to transform XML with XSL
-   - View the generated PDF in the right panel
-   - Check the output logs at the bottom
-
-5. **Auto-generate:**
-   - Enable "Auto-generate on save" to automatically create PDF after each save
+1. **Create/Open Workspace** - Click "New PDF Workspace" or open an existing folder
+2. **Edit Files** - Open files from the file explorer, edit with Monaco editor
+3. **Select Main Files** - Choose XML and XSL files from toolbar dropdowns
+4. **Generate PDF** - Click "Generate PDF" or enable auto-generate on save
+5. **File Operations** - Right-click in explorer to create/rename/delete files and folders
 
 ## Project Structure
 
 ```
 fop-live-editor/
-├── assets/
-│   └── bundled/           # Bundled resources (not in git)
-│       ├── jre/           # Java Runtime Environment
-│       └── fop/           # Apache FOP binaries
-├── examples/              # Sample XML and XSL files
-│   ├── xml/
-│   │   └── sample.xml
-│   └── xsl/
-│       └── sample.xsl
+├── assets/bundled/        # Bundled JRE + FOP (not in git)
+├── examples/              # Sample XML/XSL files (copied to new workspaces)
 ├── src/
-│   ├── main/              # Electron main process
-│   │   ├── main.ts        # Main process entry point
-│   │   └── preload.ts     # Preload script (IPC bridge)
-│   └── renderer/          # React renderer process
-│       ├── App.tsx        # Main React component
-│       ├── App.css        # Styles
-│       └── main.tsx       # Renderer entry point
-├── dist-electron/         # Compiled Electron code (generated)
-├── dist/                  # Compiled React code (generated)
-├── package.json
-├── vite.config.ts
-└── tsconfig.json
+│   ├── main/              # Electron main process + FopServer.java
+│   └── renderer/          # React UI with Monaco editor
+├── release/               # Built installers (generated)
+└── package.json
 ```
 
 ## Scripts
@@ -112,13 +84,10 @@ fop-live-editor/
 
 ## Technology Stack
 
-- **Electron** - Desktop application framework
-- **React** - UI framework
-- **Vite** - Build tool and dev server
-- **TypeScript** - Type-safe JavaScript
-- **CodeMirror 6** - Code editor with XML syntax highlighting
-- **Apache FOP** - XSL-FO to PDF transformation
-- **Eclipse Temurin JRE** - Java runtime for FOP
+- **Electron** + **React** + **Vite** + **TypeScript**
+- **Monaco Editor** - VS Code editor component
+- **Persistent FOP Server** - Custom Java server for fast PDF generation
+- **Eclipse Temurin JRE 21** - Bundled Java runtime
 
 ## Building for Production
 
@@ -132,6 +101,6 @@ This will create an installer in the `release/` folder.
 
 ## Notes
 
-- The bundled JRE (~50-80 MB) and FOP (~20-30 MB) are not included in the repository due to size
-- Generated PDFs are saved to: `%APPDATA%/fop-live-editor/output.pdf`
-- The application is currently configured for Windows x64 only
+- Bundled JRE and FOP not included in repository (download separately)
+- Workspaces store settings in `.fop-editor-workspace.json`
+- Windows x64 only, portable ZIP and NSIS installer available
