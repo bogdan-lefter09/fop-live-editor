@@ -2,6 +2,9 @@
 
 A desktop application for editing and previewing XSL-FO transformations in real-time. Built with Electron, React, Vite, and Apache FOP.
 
+## Demo
+![Demo](assets/demo.gif)
+
 ## Features
 
 - � **Workspace System** - Multi-workspace tabs with persistent settings
