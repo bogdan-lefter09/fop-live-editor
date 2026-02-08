@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { UpdateBanner } from './components/UpdateBanner';
 import { WorkspaceTabBar } from './components/WorkspaceTabBar';
@@ -59,6 +59,9 @@ function AppContent() {
     selectedXmlFileRef,
     selectedXslFileRef,
   } = useWorkspace();
+
+  // Track files saved by the app to avoid file watcher remounting the editor
+  const recentlySavedPaths = useRef<Set<string>>(new Set());
 
   // State for updates
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
@@ -154,29 +157,35 @@ function AppContent() {
 
       // Normalize paths for comparison (handle different separators)
       const normalizedChangedPath = data.filePath.replace(/\//g, '\\').toLowerCase();
-      const fileIndex = openFilesRef.current.findIndex(f => f.path.replace(/\//g, '\\').toLowerCase() === normalizedChangedPath);
 
-      if (fileIndex !== -1) {
-        try {
-          const newContent = await window.electronAPI.readFile(data.filePath);
+      // If this change was triggered by our own save, skip reloading to preserve undo history
+      if (recentlySavedPaths.current.has(normalizedChangedPath)) {
+        recentlySavedPaths.current.delete(normalizedChangedPath);
+      } else {
+        const fileIndex = openFilesRef.current.findIndex(f => f.path.replace(/\//g, '\\').toLowerCase() === normalizedChangedPath);
 
-          setOpenFiles(files => {
-            const updated = [...files];
-            updated[fileIndex] = {
-              ...updated[fileIndex],
-              content: newContent,
-              originalContent: newContent,
-              isDirty: false
-            };
-            return updated;
-          });
+        if (fileIndex !== -1) {
+          try {
+            const newContent = await window.electronAPI.readFile(data.filePath);
 
-          // Force editor to remount with new content if this is the active file
-          if (fileIndex === activeFileIndexRef.current) {
-            setEditorReloadKey(prev => prev + 1);
+            setOpenFiles(files => {
+              const updated = [...files];
+              updated[fileIndex] = {
+                ...updated[fileIndex],
+                content: newContent,
+                originalContent: newContent,
+                isDirty: false
+              };
+              return updated;
+            });
+
+            // Force editor to remount with new content if this is the active file
+            if (fileIndex === activeFileIndexRef.current) {
+              setEditorReloadKey(prev => prev + 1);
+            }
+          } catch (error) {
+            console.error('Failed to reload file:', error);
           }
-        } catch (error) {
-          console.error('Failed to reload file:', error);
         }
       }
 
@@ -188,10 +197,28 @@ function AppContent() {
 
     const cleanup1 = window.electronAPI.onFileChanged(handleFileChanged);
 
-    // Listen for workspace restoration
+    // Listen for workspace restoration - restore tabs without auto-activating
     const cleanup2 = window.electronAPI.onRestoreWorkspaces(async (workspacePaths: string[]) => {
+      const restoredWorkspaces: Workspace[] = [];
       for (const workspacePath of workspacePaths) {
-        await openWorkspaceByPath(workspacePath);
+        try {
+          const isAlreadyOpen = workspacesRef.current.some(w => w.path === workspacePath);
+          if (isAlreadyOpen) continue;
+
+          const settings = await window.electronAPI.loadWorkspaceSettings(workspacePath);
+          const newWorkspace: Workspace = {
+            id: `workspace-${Date.now()}-${Math.random()}`,
+            name: settings.workspaceName || workspacePath.split('\\').pop() || 'Workspace',
+            path: workspacePath
+          };
+          restoredWorkspaces.push(newWorkspace);
+        } catch (error) {
+          console.error('Error restoring workspace:', workspacePath, error);
+        }
+      }
+      if (restoredWorkspaces.length > 0) {
+        setWorkspaces(prev => [...prev, ...restoredWorkspaces]);
+        // Don't set activeWorkspaceId — user stays on welcome screen
       }
     });
 
@@ -487,10 +514,8 @@ function AppContent() {
   // Save open workspaces whenever the workspace list changes
   useEffect(() => {
     const workspacePaths = workspaces.map(w => w.path);
-    if (workspacePaths.length > 0) {
-      window.electronAPI.saveLastOpenedWorkspaces(workspacePaths)
-        .catch(err => console.error('Failed to save open workspaces:', err));
-    }
+    window.electronAPI.saveLastOpenedWorkspaces(workspacePaths)
+      .catch(err => console.error('Failed to save open workspaces:', err));
   }, [workspaces]);
 
   const handleFileClick = async (filePath: string) => {
@@ -651,6 +676,12 @@ function AppContent() {
 
     const file = openFiles[activeFileIndex];
     try {
+      // Mark file as self-saved so file watcher skips remounting the editor (preserves undo history)
+      const normalizedPath = file.path.replace(/\//g, '\\').toLowerCase();
+      recentlySavedPaths.current.add(normalizedPath);
+      // Clear the marker after a timeout in case the watcher event never arrives
+      setTimeout(() => recentlySavedPaths.current.delete(normalizedPath), 5000);
+
       await window.electronAPI.saveFile(file.path, file.content);
 
       const updatedFiles = [...openFiles];

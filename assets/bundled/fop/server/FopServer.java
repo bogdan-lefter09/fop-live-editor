@@ -42,11 +42,15 @@ public class FopServer {
     }
     
     private static void initializeFop() throws Exception {
-        // Create FOP factory with default configuration
-        fopFactory = FopFactory.newInstance(new File(".").toURI());
+        // Create FOP factory with default configuration using absolute base URI
+        File baseDir = new File(System.getProperty("user.dir"));
+        fopFactory = FopFactory.newInstance(baseDir.toURI());
         
         // Create transformer factory
         transformerFactory = TransformerFactory.newInstance();
+        
+        // Disable external entity resolution for security
+        transformerFactory.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", true);
         
         // Try to set attributes (may not be supported by all implementations)
         try {
@@ -108,8 +112,12 @@ public class FopServer {
             }
             
             // Set working directory if provided (for relative imports in XSL)
+            File workingDirectory = null;
             if (cmd.workingDir != null) {
-                System.setProperty("user.dir", cmd.workingDir);
+                workingDirectory = new File(cmd.workingDir);
+                if (workingDirectory.exists() && workingDirectory.isDirectory()) {
+                    System.setProperty("user.dir", cmd.workingDir);
+                }
             }
             
             // Create FOP user agent
@@ -118,12 +126,38 @@ public class FopServer {
             // Create FOP instance
             Fop fop = fopFactory.newFop(MimeConstants.MIME_PDF, foUserAgent, pdfOutputStream);
             
-            // Setup XSLT transformer
+            // Setup XSLT transformer with proper URIResolver
             Source xsltSource = new StreamSource(xslFile);
+            xsltSource.setSystemId(xslFile.toURI().toString());
+            
             Transformer transformer = transformerFactory.newTransformer(xsltSource);
+            
+            // Set URI resolver for the transformer to resolve relative imports
+            if (workingDirectory != null) {
+                final File baseDir = workingDirectory;
+                transformer.setURIResolver(new javax.xml.transform.URIResolver() {
+                    public Source resolve(String href, String base) throws TransformerException {
+                        try {
+                            File resolvedFile = new File(baseDir, href);
+                            if (!resolvedFile.exists()) {
+                                resolvedFile = new File(href);
+                            }
+                            if (resolvedFile.exists()) {
+                                StreamSource source = new StreamSource(resolvedFile);
+                                source.setSystemId(resolvedFile.toURI().toString());
+                                return source;
+                            }
+                        } catch (Exception e) {
+                            // Fall through to default resolution
+                        }
+                        return null;
+                    }
+                });
+            }
             
             // Setup input XML
             Source xmlSource = new StreamSource(xmlFile);
+            xmlSource.setSystemId(xmlFile.toURI().toString());
             
             // Setup output (FOP SAXResult)
             Result result = new SAXResult(fop.getDefaultHandler());
@@ -150,7 +184,26 @@ public class FopServer {
             sendResponse(response);
             
         } catch (Exception e) {
-            sendError("PDF generation failed: " + e.getMessage(), getStackTrace(e), cmd.requestId);
+            String errorMessage = e.getMessage();
+            String errorClass = e.getClass().getName();
+            
+            // Build detailed error message
+            StringBuilder detailedError = new StringBuilder();
+            detailedError.append("PDF generation failed: ");
+            detailedError.append(errorClass).append(": ");
+            detailedError.append(errorMessage != null ? errorMessage : "Unknown error");
+            
+            // Check for common issues
+            if (errorMessage != null) {
+                if (errorMessage.contains("not a valid object reference")) {
+                    detailedError.append("\n\nPossible cause: FOP configuration or resource resolution issue.");
+                    detailedError.append("\nMake sure all XSL imports use correct paths relative to the XSL folder.");
+                } else if (errorMessage.contains("Cannot find")) {
+                    detailedError.append("\n\nPossible cause: Missing file or resource in XSL transformation.");
+                }
+            }
+            
+            sendError(detailedError.toString(), getStackTrace(e), cmd.requestId);
         } finally {
             try {
                 pdfOutputStream.close();

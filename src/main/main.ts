@@ -305,6 +305,37 @@ function stopFopServer() {
   fopServerReady = false;
 }
 
+function waitForFopServer(timeoutMs = 30000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (fopServerReady && fopServerProcess) {
+      resolve();
+      return;
+    }
+
+    // If the server process is dead, restart it
+    if (!fopServerProcess) {
+      console.log('FOP server process not running, restarting...');
+      startFopServer();
+    }
+
+    const pollInterval = 250;
+    let elapsed = 0;
+
+    const timer = setInterval(() => {
+      if (fopServerReady && fopServerProcess) {
+        clearInterval(timer);
+        resolve();
+      } else {
+        elapsed += pollInterval;
+        if (elapsed >= timeoutMs) {
+          clearInterval(timer);
+          reject(new Error('FOP server failed to start within ' + (timeoutMs / 1000) + ' seconds'));
+        }
+      }
+    }, pollInterval);
+  });
+}
+
 function sendFopCommand(command: any): Promise<any> {
   return new Promise((resolve, reject) => {
     if (!fopServerProcess || !fopServerReady) {
@@ -1101,7 +1132,11 @@ ipcMain.handle('search-workspace', async (_event, workspacePath: string, searchQ
 ipcMain.handle('generate-pdf', async (_event, xmlPath: string, xslPath: string, xslFolder: string) => {
   try {
     if (!fopServerReady) {
-      throw new Error('FOP server is not ready. Please wait...');
+      console.log('FOP server not ready yet, waiting...');
+      if (mainWindow) {
+        mainWindow.webContents.send('generation-log', 'FOP server is starting up, please wait...\n');
+      }
+      await waitForFopServer();
     }
 
     const outputPdf = getOutputPdfPath();
