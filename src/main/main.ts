@@ -221,6 +221,7 @@ function startFopServer() {
     '-XX:MaxGCPauseMillis=50',
     '-Djavax.xml.accessExternalStylesheet=all',
     '-Djavax.xml.accessExternalSchema=all',
+    '-Djavax.xml.accessExternalDTD=all',
     '-Dfop.fontcache=temp',
     '-cp',
     classpath,
