@@ -1,6 +1,6 @@
 {
   "name": "fop-live-editor",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "FOP Live Editor - Electron app for editing and previewing XSL-FO transformations",
   "main": "dist-electron/main.js",
   "scripts": {
