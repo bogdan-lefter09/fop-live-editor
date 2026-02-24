@@ -92,7 +92,10 @@ const FopSettingsDialog: React.FC<FopSettingsDialogProps> = ({ isOpen, onClose }
       }
 
       // Save settings
-      const saveResult = await window.electronAPI.saveFopSettings(settings);
+      const saveResult = await window.electronAPI.saveFopSettings({
+        useBundled: settings.useBundled,
+        customFopPath: settings.customFopPath || undefined
+      });
       if (!saveResult.success) {
         setValidationError(saveResult.error || 'Failed to save settings');
         setIsLoading(false);
