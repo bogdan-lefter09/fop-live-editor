@@ -25,8 +25,8 @@ Before running this application, you need to download and set up the bundled res
 
 ### 1. Java Runtime Environment (JRE)
 
-Download Eclipse Temurin JRE 17+ for Windows x64 from [Adoptium](https://adoptium.net/):
-- Choose: **JRE** (not JDK), **Windows x64**, **Version 17 or 21 (LTS)**
+Download Eclipse Temurin JRE 8+ for Windows x64 from [Adoptium](https://adoptium.net/):
+- Choose: **JRE** (not JDK), **Windows x64**, **Version 8 or higher**
 - Extract the downloaded archive
 - Copy the extracted JRE folder to: `assets/bundled/jre/`
 - Verify the structure: `assets/bundled/jre/bin/java.exe` should exist
@@ -94,7 +94,7 @@ fop-live-editor/
 - **Electron** + **React** + **Vite** + **TypeScript**
 - **Monaco Editor** - VS Code editor component
 - **Persistent FOP Server** - Custom Java server for fast PDF generation
-- **Eclipse Temurin JRE 21** - Bundled Java runtime
+- **Eclipse Temurin JRE 8+** - Bundled Java runtime
 
 ## Building for Production
 
