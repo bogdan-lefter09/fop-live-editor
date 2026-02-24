@@ -70,6 +70,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('restore-workspaces', listener);
   },
 
+  // FOP Settings functions
+  getFopSettings: () => ipcRenderer.invoke('get-fop-settings'),
+  saveFopSettings: (settings: { useBundled: boolean; customFopPath?: string }) => ipcRenderer.invoke('save-fop-settings', settings),
+  validateFopDirectory: (fopPath: string) => ipcRenderer.invoke('validate-fop-directory', fopPath),
+  selectFopDirectory: () => ipcRenderer.invoke('select-fop-directory'),
+  restartApp: () => ipcRenderer.invoke('restart-app'),
+
   // Menu event listeners
   onMenuNewWorkspace: (callback: () => void) => {
     const handler = () => callback();
@@ -80,5 +87,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = () => callback();
     ipcRenderer.on('menu-open-folder', handler);
     return () => ipcRenderer.removeListener('menu-open-folder', handler);
+  },
+  onMenuChooseFopVersion: (callback: () => void) => {
+    const handler = () => callback();
+    ipcRenderer.on('menu-choose-fop-version', handler);
+    return () => ipcRenderer.removeListener('menu-choose-fop-version', handler);
   },
 });

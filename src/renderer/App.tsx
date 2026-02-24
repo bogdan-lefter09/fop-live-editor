@@ -11,6 +11,7 @@ import { SearchPanel, SearchResult } from './components/SearchPanel';
 import { EditorPane } from './components/EditorPane';
 import { PdfViewer } from './components/PdfViewer';
 import { LogPanel } from './components/LogPanel';
+import FopSettingsDialog from './components/FopSettingsDialog';
 import { Workspace, OpenFile } from './types';
 import './App.css';
 
@@ -27,6 +28,8 @@ function AppContent() {
     setShowFileExplorer,
     showSearch,
     setShowSearch,
+    showFopSettings,
+    setShowFopSettings,
     workspaceFiles,
     setWorkspaceFiles,
     openFiles,
@@ -280,12 +283,18 @@ function AppContent() {
       setActiveWorkspaceId(null);
     };
 
+    const handleChooseFopVersion = () => {
+      setShowFopSettings(true);
+    };
+
     const cleanupNewWorkspace = window.electronAPI.onMenuNewWorkspace?.(handleNewWorkspace);
     const cleanupOpenFolder = window.electronAPI.onMenuOpenFolder?.(handleOpenFolderAsWorkspace);
+    const cleanupChooseFopVersion = window.electronAPI.onMenuChooseFopVersion?.(handleChooseFopVersion);
 
     return () => {
       cleanupNewWorkspace?.();
       cleanupOpenFolder?.();
+      cleanupChooseFopVersion?.();
     };
   }, [handleOpenFolderAsWorkspace]);
 
@@ -933,6 +942,12 @@ function AppContent() {
           onClearLogs={() => setLogs('')}
           onHideLogs={() => setShowLogs(false)}
           onShowLogs={() => setShowLogs(true)}
+        />
+        
+        {/* FOP Settings Dialog */}
+        <FopSettingsDialog
+          isOpen={showFopSettings}
+          onClose={() => setShowFopSettings(false)}
         />
       </div>
     </div>

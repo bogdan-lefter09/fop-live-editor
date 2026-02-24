@@ -104,9 +104,17 @@ declare global {
     getRecentWorkspaces: () => Promise<string[]>;
     onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => (() => void);
 
+    // FOP Settings functions
+    getFopSettings: () => Promise<{ useBundled: boolean; customFopPath: string | null }>;
+    saveFopSettings: (settings: { useBundled: boolean; customFopPath?: string }) => Promise<{ success: boolean; error?: string }>;
+    validateFopDirectory: (fopPath: string) => Promise<{ valid: boolean; error?: string; fopJar?: string }>;
+    selectFopDirectory: () => Promise<{ path: string; validation: { valid: boolean; error?: string; fopJar?: string } } | null>;
+    restartApp: () => Promise<{ success: boolean; error?: string }>;
+
     // Menu event listeners
     onMenuNewWorkspace: (callback: () => void) => (() => void);
     onMenuOpenFolder: (callback: () => void) => (() => void);
+    onMenuChooseFopVersion: (callback: () => void) => (() => void);
   };
   electron: {
     ipcRenderer: {

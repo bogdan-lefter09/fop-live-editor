@@ -42,25 +42,54 @@ public class FopServer {
     }
     
     private static void initializeFop() throws Exception {
-        // Create FOP factory with default configuration using absolute base URI
+        // Create FOP factory - try different methods based on available APIs
         File baseDir = new File(System.getProperty("user.dir"));
-        fopFactory = FopFactory.newInstance(baseDir.toURI());
+        
+        try {
+            // Try FOP 2.x API with URI (preferred, works at compile time)
+            fopFactory = FopFactory.newInstance(baseDir.toURI());
+        } catch (NoSuchMethodError e1) {
+            try {
+                // Try FOP 2.x API with File parameter (works at compile time)
+                fopFactory = FopFactory.newInstance(baseDir);
+            } catch (NoSuchMethodError e2) {
+                // For older FOP versions, use reflection to avoid compilation issues
+                try {
+                    // Try parameterless newInstance method for older FOP versions
+                    java.lang.reflect.Method method = FopFactory.class.getMethod("newInstance", (Class<?>[]) null);
+                    fopFactory = (FopFactory) method.invoke(null, (Object[]) null);
+                } catch (Exception e3) {
+                    try {
+                        // Try alternative older API
+                        java.lang.reflect.Method method = FopFactory.class.getMethod("newInstance", new Class[0]);
+                        fopFactory = (FopFactory) method.invoke(null, new Object[0]);
+                    } catch (Exception e4) {
+                        throw new Exception("Unable to create FOP factory - no compatible API found for this FOP version. " +
+                                          "Tried URI-based, File-based, and parameterless newInstance methods.", e4);
+                    }
+                }
+            }
+        }
         
         // Create transformer factory
         transformerFactory = TransformerFactory.newInstance();
         
-        // Disable external entity resolution for security
-        transformerFactory.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", true);
+        // Try to configure security features (may not be supported in older versions)
+        try {
+            transformerFactory.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", true);
+        } catch (Exception e) {
+            // Ignore if not supported
+        }
         
         // Try to set attributes (may not be supported by all implementations)
         try {
             transformerFactory.setAttribute("http://javax.xml.XMLConstants/property/accessExternalStylesheet", "all");
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             // Ignore if not supported
         }
         try {
             transformerFactory.setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "all");
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             // Ignore if not supported
         }
     }

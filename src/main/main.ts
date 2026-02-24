@@ -19,7 +19,11 @@ const store = new Store({
   defaults: {
     lastOpenedWorkspaces: [],
     recentWorkspaces: [],
-    maxRecentWorkspaces: 10
+    maxRecentWorkspaces: 10,
+    fopConfig: {
+      useBundled: true,
+      customFopPath: null
+    }
   }
 });
 
@@ -88,6 +92,15 @@ function createApplicationMenu() {
           click: () => {
             if (mainWindow) {
               mainWindow.webContents.send('menu-open-folder');
+            }
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Choose FOP version',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-choose-fop-version');
             }
           }
         },
@@ -194,8 +207,8 @@ function startFopServer() {
     return;
   }
 
-  const paths = getBundledPaths();
-  const serverDir = path.join(paths.fopDir, 'server');
+  const paths = getFopPaths();
+  const serverDir = paths.serverDir; // Use the provided server directory
 
   // Build classpath
   const libDir = path.join(paths.fopDir, 'lib');
@@ -381,21 +394,33 @@ function handleFopServerResponse(response: any) {
 }
 
 // Helper: Get bundled resource paths
-function getBundledPaths() {
-  let resourcesPath: string;
-
+function getFopPaths() {
+  const fopConfig = store.get('fopConfig') as any;
+  
+  // Always get bundled resources path for server components
+  let bundledResourcesPath: string;
   if (isDev) {
-    // In development, assets are in the project root
-    resourcesPath = path.join(app.getAppPath(), 'assets/bundled');
+    bundledResourcesPath = path.join(app.getAppPath(), 'assets/bundled');
   } else {
-    // In production, assets are in the resources folder
-    resourcesPath = path.join(process.resourcesPath, 'bundled');
+    bundledResourcesPath = path.join(process.resourcesPath, 'bundled');
   }
-
+  
+  if (!fopConfig.useBundled && fopConfig.customFopPath) {
+    // Use custom FOP installation with bundled Java and server
+    return {
+      javaExe: path.join(bundledResourcesPath, 'jre/bin/java.exe'),
+      fopJar: path.join(fopConfig.customFopPath, 'build/fop-2.11.jar'),
+      fopDir: fopConfig.customFopPath,
+      serverDir: path.join(bundledResourcesPath, 'fop/server'), // Always use bundled server
+    };
+  }
+  
+  // Use bundled FOP installation
   return {
-    javaExe: path.join(resourcesPath, 'jre/bin/java.exe'),
-    fopJar: path.join(resourcesPath, 'fop/build/fop-2.11.jar'),
-    fopDir: path.join(resourcesPath, 'fop'),
+    javaExe: path.join(bundledResourcesPath, 'jre/bin/java.exe'),
+    fopJar: path.join(bundledResourcesPath, 'fop/build/fop-2.11.jar'),
+    fopDir: path.join(bundledResourcesPath, 'fop'),
+    serverDir: path.join(bundledResourcesPath, 'fop/server'),
   };
 }
 
@@ -1314,6 +1339,109 @@ ipcMain.handle('get-recent-workspaces', async () => {
   }
   
   return existing;
+});
+
+// FOP Settings handlers
+ipcMain.handle('get-fop-settings', async () => {
+  const fopConfig = store.get('fopConfig') as any;
+  return {
+    useBundled: fopConfig.useBundled ?? true,
+    customFopPath: fopConfig.customFopPath ?? null
+  };
+});
+
+ipcMain.handle('save-fop-settings', async (_event, settings: { useBundled: boolean; customFopPath?: string }) => {
+  try {
+    store.set('fopConfig', settings);
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving FOP settings:', error);
+    return { success: false, error: 'Failed to save settings' };
+  }
+});
+
+ipcMain.handle('validate-fop-directory', async (_event, fopPath: string) => {
+  return await validateFopDirectory(fopPath);
+});
+
+// Helper function to validate FOP directory
+async function validateFopDirectory(fopPath: string) {
+  try {
+    if (!fopPath || !fs.existsSync(fopPath)) {
+      return { valid: false, error: 'Directory does not exist' };
+    }
+
+    // Check for required directories and files
+    const buildDir = path.join(fopPath, 'build');
+    const libDir = path.join(fopPath, 'lib');
+
+    if (!fs.existsSync(buildDir)) {
+      return { valid: false, error: 'Missing build directory' };
+    }
+    
+    if (!fs.existsSync(libDir)) {
+      return { valid: false, error: 'Missing lib directory' };
+    }
+
+    // Check for any fop jar (not necessarily 2.11)
+    const buildFiles = fs.readdirSync(buildDir);
+    const fopJars = buildFiles.filter(file => file.startsWith('fop') && file.endsWith('.jar'));
+    
+    if (fopJars.length === 0) {
+      return { valid: false, error: 'No FOP JAR found in build directory' };
+    }
+
+    return { valid: true, fopJar: fopJars[0] };
+  } catch (error) {
+    console.error('Error validating FOP directory:', error);
+    return { valid: false, error: 'Failed to validate directory' };
+  }
+}
+
+ipcMain.handle('select-fop-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select FOP Directory'
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const selectedPath = result.filePaths[0];
+  
+  // Validate the selected directory
+  const validation = await validateFopDirectory(selectedPath);
+  
+  return {
+    path: selectedPath,
+    validation: validation
+  };
+});
+
+ipcMain.handle('restart-app', async () => {
+  try {
+    console.log('Restarting application...');
+    
+    // Stop FOP server and cleanup
+    stopFopServer();
+    stopAllWatchers();
+    
+    // In development mode, just quit and let the dev server restart
+    if (isDev) {
+      app.quit();
+      return { success: true };
+    }
+    
+    // For production, use proper relaunch
+    app.relaunch();
+    app.quit();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error restarting application:', error);
+    return { success: false, error: 'Failed to restart application' };
+  }
 });
 
 // Auto-updater setup

@@ -1,0 +1,217 @@
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.fop-settings-dialog {
+  background: var(--bg-color, #2d2d2d);
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-color, #e0e0e0);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color, #404040);
+}
+
+.dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: var(--text-color, #e0e0e0);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-button:hover {
+  background-color: var(--hover-color, #404040);
+}
+
+.close-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-body {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.fop-option {
+  margin-bottom: 24px;
+}
+
+.fop-option label {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.fop-option input[type="radio"] {
+  margin-right: 12px;
+  scale: 1.2;
+}
+
+.option-description {
+  color: var(--text-secondary, #b0b0b0);
+  font-size: 14px;
+  margin: 8px 0 16px 0;
+  line-height: 1.4;
+}
+
+.custom-path-section {
+  margin-left: 32px;
+  margin-top: 16px;
+}
+
+.path-input-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.path-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #404040);
+  border-radius: 4px;
+  background-color: var(--input-bg, #3d3d3d);
+  color: var(--text-color, #e0e0e0);
+  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.path-input:read-only {
+  background-color: var(--input-readonly-bg, #333333);
+  cursor: default;
+}
+
+.browse-button {
+  padding: 8px 16px;
+  background-color: var(--button-bg, #0066cc);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.browse-button:hover {
+  background-color: var(--button-hover-bg, #0052a3);
+}
+
+.browse-button:disabled {
+  background-color: var(--button-disabled-bg, #555555);
+  cursor: not-allowed;
+}
+
+.validation-error {
+  color: var(--error-color, #ff4444);
+  font-size: 13px;
+  padding: 8px;
+  background-color: var(--error-bg, #3d2020);
+  border: 1px solid var(--error-border, #aa2020);
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color, #404040);
+  background-color: var(--footer-bg, #252525);
+}
+
+.cancel-button,
+.ok-button {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.cancel-button {
+  background-color: var(--button-secondary-bg, #505050);
+  color: var(--text-color, #e0e0e0);
+}
+
+.cancel-button:hover {
+  background-color: var(--button-secondary-hover-bg, #606060);
+}
+
+.ok-button {
+  background-color: var(--button-primary-bg, #0066cc);
+  color: white;
+}
+
+.ok-button:hover {
+  background-color: var(--button-primary-hover-bg, #0052a3);
+}
+
+.ok-button:disabled,
+.cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ok-button:disabled:hover {
+  background-color: var(--button-primary-bg, #0066cc);
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  .fop-settings-dialog {
+    --bg-color: #2d2d2d;
+    --text-color: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --border-color: #404040;
+    --hover-color: #404040;
+    --input-bg: #3d3d3d;
+    --input-readonly-bg: #333333;
+    --button-bg: #0066cc;
+    --button-hover-bg: #0052a3;
+    --button-disabled-bg: #555555;
+    --error-color: #ff6b6b;
+    --error-bg: #3d2020;
+    --error-border: #aa2020;
+    --footer-bg: #252525;
+    --button-secondary-bg: #505050;
+    --button-secondary-hover-bg: #606060;
+    --button-primary-bg: #0066cc;
+    --button-primary-hover-bg: #0052a3;
+  }
+}

@@ -16,6 +16,8 @@ interface WorkspaceContextType {
   setShowFileExplorer: React.Dispatch<React.SetStateAction<boolean>>;
   showSearch: boolean;
   setShowSearch: React.Dispatch<React.SetStateAction<boolean>>;
+  showFopSettings: boolean;
+  setShowFopSettings: React.Dispatch<React.SetStateAction<boolean>>;
 
   // Files state
   workspaceFiles: WorkspaceFiles;
@@ -84,6 +86,7 @@ export const WorkspaceProvider = ({ children }: WorkspaceProviderProps) => {
   // UI state
   const [showFileExplorer, setShowFileExplorer] = useState<boolean>(true);
   const [showSearch, setShowSearch] = useState<boolean>(false);
+  const [showFopSettings, setShowFopSettings] = useState<boolean>(false);
 
   // Files state
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFiles>({ xml: [], xsl: [] });
@@ -132,6 +135,8 @@ export const WorkspaceProvider = ({ children }: WorkspaceProviderProps) => {
     setShowFileExplorer,
     showSearch,
     setShowSearch,
+    showFopSettings,
+    setShowFopSettings,
     workspaceFiles,
     setWorkspaceFiles,
     openFiles,
