@@ -103,7 +103,6 @@ body, html {
 
 .app-content {
   display: grid;
-  grid-template-columns: 2fr 1fr;
   grid-template-rows: 1fr auto;
   flex: 1;
   gap: 8px;
@@ -605,6 +604,35 @@ body, html {
   box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   overflow: hidden;
   min-height: 0;
+}
+
+.resize-handle {
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  user-select: none;
+  align-self: stretch;
+  border-radius: 2px;
+}
+
+.resize-handle:hover {
+  background: #007acc66;
+}
+
+body.resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.resizing * {
+  user-select: none !important;
+}
+
+.resize-drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  cursor: col-resize;
 }
 
 .bottom-panel {

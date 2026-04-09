@@ -82,6 +82,14 @@ function AppContent() {
   const [searchError, setSearchError] = useState('');
   const [searchExpandedFiles, setSearchExpandedFiles] = useState<Set<string>>(new Set());
 
+  // PDF panel resize
+  const [pdfPanelPct, setPdfPanelPct] = useState(33);
+  const [isDragging, setIsDragging] = useState(false);
+  const appContentRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+  const resizeStartX = useRef(0);
+  const resizeStartPct = useRef(33);
+
   // Keep refs up to date
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces, workspacesRef]);
   useEffect(() => { activeWorkspaceIdRef.current = activeWorkspaceId; }, [activeWorkspaceId, activeWorkspaceIdRef]);
@@ -782,8 +790,44 @@ function AppContent() {
     setShowFileExplorer(false);
   };
 
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    resizeStartX.current = e.clientX;
+    resizeStartPct.current = pdfPanelPct;
+    setIsDragging(true);
+    document.body.classList.add('resizing');
+  };
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current || !appContentRef.current) return;
+      const dx = e.clientX - resizeStartX.current;
+      const containerWidth = appContentRef.current.offsetWidth;
+      const dPct = (dx / containerWidth) * 100;
+      const newPct = Math.min(50, Math.max(25, resizeStartPct.current - dPct));
+      setPdfPanelPct(newPct);
+    };
+
+    const onMouseUp = () => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        setIsDragging(false);
+        document.body.classList.remove('resizing');
+      }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
   return (
     <div className="app-container">
+      {isDragging && <div className="resize-drag-overlay" />}
       <UpdateBanner
         updateAvailable={updateAvailable}
         updateInfo={updateInfo}
@@ -818,7 +862,7 @@ function AppContent() {
         }}
       />
 
-      <div className="app-content">
+      <div className="app-content" ref={appContentRef} style={{ gridTemplateColumns: `${100 - pdfPanelPct}fr 4px ${pdfPanelPct}fr` }}>
         {workspaces.length === 0 && !showWorkspaceForm ? (
           <div style={{ gridColumn: '1 / -1' }}>
             <NoWorkspaceView
@@ -922,6 +966,8 @@ function AppContent() {
                 );
               })}
             </div>
+
+            <div className="resize-handle" onMouseDown={handleResizeMouseDown} />
 
             {workspaces.map(workspace => (
               workspace.id === activeWorkspaceId && (
