@@ -20,6 +20,7 @@ const store = new Store({
     lastOpenedWorkspaces: [],
     recentWorkspaces: [],
     maxRecentWorkspaces: 10,
+    skipDeleteConfirm: false,
     fopConfig: {
       useBundled: true,
       customFopPath: null
@@ -1339,6 +1340,16 @@ ipcMain.handle('get-recent-workspaces', async () => {
   }
   
   return existing;
+});
+
+// Delete confirmation preference ("don't ask me again")
+ipcMain.handle('get-skip-delete-confirm', async () => {
+  return store.get('skipDeleteConfirm', false);
+});
+
+ipcMain.handle('set-skip-delete-confirm', async (_event, value: boolean) => {
+  store.set('skipDeleteConfirm', value);
+  return { success: true };
 });
 
 // FOP Settings handlers

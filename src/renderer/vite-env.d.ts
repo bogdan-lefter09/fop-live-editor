@@ -104,6 +104,10 @@ declare global {
     getRecentWorkspaces: () => Promise<string[]>;
     onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => (() => void);
 
+    // Delete confirmation preference
+    getSkipDeleteConfirm: () => Promise<boolean>;
+    setSkipDeleteConfirm: (value: boolean) => Promise<{ success: boolean }>;
+
     // FOP Settings functions
     getFopSettings: () => Promise<{ useBundled: boolean; customFopPath: string | null }>;
     saveFopSettings: (settings: { useBundled: boolean; customFopPath?: string }) => Promise<{ success: boolean; error?: string }>;

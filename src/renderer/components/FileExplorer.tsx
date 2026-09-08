@@ -25,6 +25,7 @@ interface ContextMenuState {
 export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesChanged, onFileRenamed, onFileDeleted }: FileExplorerProps) => {
   const { showToast } = useToast();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [creatingInFolder, setCreatingInFolder] = useState<string | null>(null); // Full path like "xml" or "xml/subfolder"
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -50,6 +51,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       return () => document.removeEventListener('click', handleClick);
     }
   }, [contextMenu.show]);
+
+  // Load "don't ask me again" preference for delete confirmations
+  useEffect(() => {
+    window.electronAPI.getSkipDeleteConfirm().then(setSkipDeleteConfirm);
+  }, []);
 
   // Focus input when creating file
   useEffect(() => {
@@ -83,6 +89,41 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   }, [renamingFolder]);
 
+  // Delete a file or folder, showing a toast and refreshing the tree on success
+  const performDelete = async (filePath: string, fileName: string, isFolder?: boolean) => {
+    try {
+      if (isFolder) {
+        const result = await window.electronAPI.deleteFolder(workspace.path, filePath);
+        if (result.success) {
+          onFilesChanged();
+          showToast(`Deleted folder "${fileName}"`, 'success');
+        }
+      } else {
+        const result = await window.electronAPI.deleteFile(workspace.path, filePath);
+        if (result.success) {
+          onFileDeleted(filePath);
+          onFilesChanged();
+          showToast(`Deleted "${fileName}"`, 'success');
+        }
+      }
+    } catch (error: any) {
+      console.error(`Error deleting ${isFolder ? 'folder' : 'file'}:`, error);
+      const message = error.message || `Failed to delete ${isFolder ? 'folder' : 'file'}`;
+      setError(message);
+      showToast(message, 'error');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  // Delete a file/folder immediately if the user opted out of confirmations, otherwise show the dialog
+  const requestDelete = (filePath: string, fileName: string, isFolder?: boolean) => {
+    if (skipDeleteConfirm) {
+      performDelete(filePath, fileName, isFolder);
+    } else {
+      setDeleteConfirm({ show: true, filePath, fileName, isFolder });
+    }
+  };
+
   // Keyboard shortcuts (Delete and F5)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -93,7 +134,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       if (e.key === 'Delete' && selectedFile) {
         e.preventDefault();
         const fileName = selectedFile.split('/').pop() || selectedFile;
-        setDeleteConfirm({ show: true, filePath: selectedFile, fileName });
+        requestDelete(selectedFile, fileName);
       }
 
       // F5 key - refresh workspace
@@ -105,7 +146,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFile, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged]);
+  }, [selectedFile, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged, skipDeleteConfirm]);
 
   const handleFolderContextMenu = (e: React.MouseEvent, folderPath: string, rootFolder: 'xml' | 'xsl') => {
     e.preventDefault();
@@ -400,7 +441,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleDeleteClick = () => {
     if (contextMenu.filePath) {
       const fileName = contextMenu.filePath.split('/').pop() || contextMenu.filePath;
-      setDeleteConfirm({ show: true, filePath: contextMenu.filePath, fileName, isFolder: false });
+      requestDelete(contextMenu.filePath, fileName, false);
       setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     }
   };
@@ -408,36 +449,18 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleDeleteFolderClick = () => {
     if (contextMenu.folderPath) {
       const folderName = contextMenu.folderPath.split('/').pop() || contextMenu.folderPath;
-      setDeleteConfirm({ show: true, filePath: contextMenu.folderPath, fileName: folderName, isFolder: true });
+      requestDelete(contextMenu.folderPath, folderName, true);
       setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    try {
-      if (deleteConfirm.isFolder) {
-        const result = await window.electronAPI.deleteFolder(workspace.path, deleteConfirm.filePath);
-        if (result.success) {
-          onFilesChanged();
-          showToast(`Deleted folder "${deleteConfirm.fileName}"`, 'success');
-        }
-      } else {
-        const result = await window.electronAPI.deleteFile(workspace.path, deleteConfirm.filePath);
-        if (result.success) {
-          onFileDeleted(deleteConfirm.filePath);
-          onFilesChanged();
-          showToast(`Deleted "${deleteConfirm.fileName}"`, 'success');
-        }
-      }
-    } catch (error: any) {
-      console.error(`Error deleting ${deleteConfirm.isFolder ? 'folder' : 'file'}:`, error);
-      const message = error.message || `Failed to delete ${deleteConfirm.isFolder ? 'folder' : 'file'}`;
-      setError(message);
-      showToast(message, 'error');
-      setTimeout(() => setError(''), 3000);
-    } finally {
-      setDeleteConfirm({ show: false, filePath: '', fileName: '' });
+  const handleDeleteConfirm = async (skipNextTime?: boolean) => {
+    if (skipNextTime) {
+      setSkipDeleteConfirm(true);
+      window.electronAPI.setSkipDeleteConfirm(true);
     }
+    await performDelete(deleteConfirm.filePath, deleteConfirm.fileName, deleteConfirm.isFolder);
+    setDeleteConfirm({ show: false, filePath: '', fileName: '' });
   };
 
   const handleDeleteCancel = () => {
@@ -737,6 +760,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
         isDestructive={true}
+        showSkipOption={true}
       />
     </div>
   );

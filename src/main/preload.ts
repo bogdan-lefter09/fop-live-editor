@@ -70,6 +70,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('restore-workspaces', listener);
   },
 
+  // Delete confirmation preference
+  getSkipDeleteConfirm: () => ipcRenderer.invoke('get-skip-delete-confirm'),
+  setSkipDeleteConfirm: (value: boolean) => ipcRenderer.invoke('set-skip-delete-confirm', value),
+
   // FOP Settings functions
   getFopSettings: () => ipcRenderer.invoke('get-fop-settings'),
   saveFopSettings: (settings: { useBundled: boolean; customFopPath?: string }) => ipcRenderer.invoke('save-fop-settings', settings),

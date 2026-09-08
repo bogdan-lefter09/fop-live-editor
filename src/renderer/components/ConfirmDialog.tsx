@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import './ConfirmDialog.css';
 
 interface ConfirmDialogProps {
@@ -7,9 +7,10 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm: () => void;
+  onConfirm: (skipNextTime?: boolean) => void;
   onCancel: () => void;
   isDestructive?: boolean;
+  showSkipOption?: boolean;
 }
 
 export const ConfirmDialog = ({
@@ -20,14 +21,23 @@ export const ConfirmDialog = ({
   cancelText = 'Cancel',
   onConfirm,
   onCancel,
-  isDestructive = false
+  isDestructive = false,
+  showSkipOption = false
 }: ConfirmDialogProps) => {
+  const [skipNextTime, setSkipNextTime] = useState(false);
+
+  useEffect(() => {
+    if (show) {
+      setSkipNextTime(false);
+    }
+  }, [show]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onCancel();
       } else if (e.key === 'Enter') {
-        onConfirm();
+        onConfirm(skipNextTime);
       }
     };
 
@@ -35,7 +45,7 @@ export const ConfirmDialog = ({
       document.addEventListener('keydown', handleKeyDown);
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
-  }, [show, onConfirm, onCancel]);
+  }, [show, onConfirm, onCancel, skipNextTime]);
 
   if (!show) return null;
 
@@ -47,6 +57,16 @@ export const ConfirmDialog = ({
         </div>
         <div className="confirm-dialog-body">
           <p>{message}</p>
+          {showSkipOption && (
+            <label className="confirm-dialog-skip-option">
+              <input
+                type="checkbox"
+                checked={skipNextTime}
+                onChange={(e) => setSkipNextTime(e.target.checked)}
+              />
+              <span>Don't ask me again</span>
+            </label>
+          )}
         </div>
         <div className="confirm-dialog-footer">
           <button className="btn btn-secondary" onClick={onCancel}>
@@ -54,7 +74,7 @@ export const ConfirmDialog = ({
           </button>
           <button 
             className={`btn ${isDestructive ? 'btn-danger' : 'btn-primary'}`} 
-            onClick={onConfirm}
+            onClick={() => onConfirm(skipNextTime)}
           >
             {confirmText}
           </button>
