@@ -12,12 +12,14 @@ import { EditorPane } from './components/EditorPane';
 import { PdfViewer } from './components/PdfViewer';
 import { LogPanel } from './components/LogPanel';
 import FopSettingsDialog from './components/FopSettingsDialog';
+import SettingsDialog from './components/SettingsDialog';
 import { useToast } from './context/ToastContext';
 import { Workspace, OpenFile } from './types';
 import './App.css';
 
 function AppContent() {
   const { showToast } = useToast();
+  const [showSettings, setShowSettings] = useState(false);
   const {
     workspaces,
     setWorkspaces,
@@ -918,6 +920,7 @@ function AppContent() {
                         showSearch={showSearch}
                         onToggleFileExplorer={handleToggleFileExplorer}
                         onToggleSearch={handleToggleSearch}
+                        onOpenSettings={() => setShowSettings(true)}
                       />
 
                       {(showFileExplorer || showSearch) && (
@@ -997,6 +1000,12 @@ function AppContent() {
         <FopSettingsDialog
           isOpen={showFopSettings}
           onClose={() => setShowFopSettings(false)}
+        />
+
+        {/* Settings Dialog (FOP/JRE paths + preferences) */}
+        <SettingsDialog
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
         />
       </div>
     </div>

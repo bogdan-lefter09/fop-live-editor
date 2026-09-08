@@ -81,6 +81,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFopDirectory: () => ipcRenderer.invoke('select-fop-directory'),
   restartApp: () => ipcRenderer.invoke('restart-app'),
 
+  // JRE Settings functions
+  getJreSettings: () => ipcRenderer.invoke('get-jre-settings'),
+  saveJreSettings: (settings: { useBundled: boolean; customJrePath?: string }) => ipcRenderer.invoke('save-jre-settings', settings),
+  validateJreDirectory: (jrePath: string) => ipcRenderer.invoke('validate-jre-directory', jrePath),
+  selectJreDirectory: () => ipcRenderer.invoke('select-jre-directory'),
+
   // Menu event listeners
   onMenuNewWorkspace: (callback: () => void) => {
     const handler = () => callback();

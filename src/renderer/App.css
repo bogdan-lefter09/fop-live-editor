@@ -260,6 +260,10 @@ body, html {
   background: #007acc;
 }
 
+.icon-button-bottom {
+  margin-top: auto;
+}
+
 /* Side Panel */
 .side-panel {
   width: 280px;

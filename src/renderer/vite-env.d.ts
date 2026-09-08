@@ -115,6 +115,12 @@ declare global {
     selectFopDirectory: () => Promise<{ path: string; validation: { valid: boolean; error?: string; fopJar?: string } } | null>;
     restartApp: () => Promise<{ success: boolean; error?: string }>;
 
+    // JRE Settings functions
+    getJreSettings: () => Promise<{ useBundled: boolean; customJrePath: string | null }>;
+    saveJreSettings: (settings: { useBundled: boolean; customJrePath?: string }) => Promise<{ success: boolean; error?: string }>;
+    validateJreDirectory: (jrePath: string) => Promise<{ valid: boolean; error?: string }>;
+    selectJreDirectory: () => Promise<{ path: string; validation: { valid: boolean; error?: string } } | null>;
+
     // Menu event listeners
     onMenuNewWorkspace: (callback: () => void) => (() => void);
     onMenuOpenFolder: (callback: () => void) => (() => void);

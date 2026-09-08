@@ -110,12 +110,10 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Dependencies**: Works best with Recycle Bin (#1)
 
 8. **Settings UI Screen**
-   - **Status**: ❌ Not implemented
-   - **Current**: Global settings exist but no UI to modify them
-   - **Target**: Settings panel for custom JRE/FOP paths, preferences
+   - **Status**: ✅ Implemented
+   - **Implementation**: New gear icon in the icon bar opens `SettingsDialog.tsx`, covering FOP version, JRE path (new: `jreConfig` in electron-store + `get/save-jre-settings`, `validate-jre-directory`, `select-jre-directory` IPC handlers), and the delete-confirmation preference in one place. `getFopPaths()` in `main.ts` now resolves `javaExe` from the custom JRE path when configured instead of always using the bundled JRE.
    - **Impact**: Flexibility - advanced users can customize environment
-   - **Complexity**: Medium - new UI panel, validation logic
-   - **Location**: New component `src/renderer/components/SettingsPanel.tsx`
+   - **Location**: `src/renderer/components/SettingsDialog.tsx`, `src/main/main.ts`
    - **Note**: FopServer.java is compiled with `--release 8` for maximum compatibility (Java 8+). Bundled JRE 21 runs Java 8 bytecode without issues. Custom JRE requires minimum Java 8.
 
 9. **Ctrl+W to Close Tabs**
