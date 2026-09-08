@@ -872,8 +872,8 @@ On Windows, anti-virus / Windows Defender can flag bundled executables — test 
 ### Monaco Editor Find Widget Button Alignment
 **Issue:** When pressing Ctrl+F in the Monaco editor, the find bar appears but the toggle buttons (case sensitive, whole word, regex) are misaligned vertically. The buttons appear slightly below the find input box instead of being properly centered with it.
 
-**Status:** Unresolved - CSS fixes attempted but did not solve the alignment issue.
+**Status:** Fix applied - added a scoped CSS rule (`.monaco-editor .find-widget .button`/`.monaco-custom-checkbox { box-sizing: border-box !important; }` in `App.css`) re-asserting the `box-sizing` Monaco expects on the toggle buttons, since it was losing out to other cascading rules once embedded in the app. Please re-verify visually and update this status if the issue persists.
 
-**Workaround:** None currently - the find functionality still works, but the visual alignment is incorrect.
+**Workaround:** None needed if the fix holds - the find functionality was never broken, only the visual alignment.
 
-**Next Steps:** This may require investigating Monaco Editor's internal CSS structure or potentially filing an issue with the `@monaco-editor/react` package to understand the proper way to override the default styling.
+**Next Steps:** N/A unless the issue resurfaces, in which case compare the find widget's rendered DOM against Monaco's own `editor.main.css` to find the next conflicting rule.

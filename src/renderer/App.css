@@ -596,6 +596,20 @@ body, html {
   background: #1e1e1e;
 }
 
+/*
+ * Fix: Monaco's find widget (Ctrl+F) toggle buttons (case-sensitive, whole
+ * word, regex) can end up misaligned - shifted below center - relative to
+ * the input box. Monaco's own CSS sets `box-sizing: border-box` on these
+ * buttons, but that declaration can lose out to other cascading rules
+ * (e.g. on hover/checked state) once embedded in a host app. Re-assert it
+ * with !important, scoped to just the find widget's controls, so their
+ * fixed pixel sizing/centering math matches what Monaco expects.
+ */
+.monaco-editor .find-widget .button,
+.monaco-editor .find-widget .monaco-custom-checkbox {
+  box-sizing: border-box !important;
+}
+
 .right-panel {
   display: flex;
   flex-direction: column;
