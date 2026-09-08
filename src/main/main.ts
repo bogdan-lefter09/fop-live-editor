@@ -810,6 +810,53 @@ ipcMain.handle('create-file', async (_event, workspacePath: string, folderName: 
   }
 });
 
+// Copy a file into a destination folder, auto-renaming to avoid overwriting an existing file
+ipcMain.handle('copy-file', async (_event, workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => {
+  try {
+    const normalizedSource = sourceRelativePath.replace(/\//g, path.sep);
+    const sourceFullPath = path.join(workspacePath, normalizedSource);
+
+    if (!fs.existsSync(sourceFullPath)) {
+      throw new Error('Source file not found');
+    }
+    if (fs.statSync(sourceFullPath).isDirectory()) {
+      throw new Error('Cannot copy folders');
+    }
+
+    const normalizedDestFolder = destFolderRelativePath.replace(/\//g, path.sep);
+    const destFolderFullPath = path.join(workspacePath, normalizedDestFolder);
+    if (!fs.existsSync(destFolderFullPath)) {
+      fs.mkdirSync(destFolderFullPath, { recursive: true });
+    }
+
+    const originalName = path.basename(sourceFullPath);
+    const ext = path.extname(originalName);
+    const baseName = path.basename(originalName, ext);
+
+    // Find a non-colliding destination filename, appending " (copy)", " (copy 2)", etc.
+    let candidateName = originalName;
+    let destFullPath = path.join(destFolderFullPath, candidateName);
+    let counter = 1;
+    while (fs.existsSync(destFullPath)) {
+      candidateName = counter === 1 ? `${baseName} (copy)${ext}` : `${baseName} (copy ${counter})${ext}`;
+      destFullPath = path.join(destFolderFullPath, candidateName);
+      counter++;
+    }
+
+    fs.copyFileSync(sourceFullPath, destFullPath);
+
+    const destFolderName = destFolderRelativePath.replace(/\\/g, '/');
+    const newRelativePath = `${destFolderName}/${candidateName}`;
+
+    console.log('Copied file:', sourceFullPath, '->', destFullPath);
+
+    return { success: true, newPath: newRelativePath };
+  } catch (error: any) {
+    console.error('Error copying file:', error);
+    throw error;
+  }
+});
+
 // Create folder
 ipcMain.handle('create-folder', async (_event, workspacePath: string, parentFolderPath: string, folderName: string) => {
   try {

@@ -41,6 +41,8 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   // and a ref tracking the order in which files are visible for Shift-click range selection.
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const visibleFilesOrder = useRef<string[]>([]);
+  // In-app clipboard for copy/paste of files (Ctrl+C / Ctrl+V, or the context menu)
+  const [clipboard, setClipboard] = useState<string[] | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['xml', 'xsl'])); // Track which folders are expanded
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -143,6 +145,32 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   };
 
+  // Copy currently selected file(s) to the in-app clipboard
+  const handleCopy = (filePaths: string[]) => {
+    if (filePaths.length === 0) return;
+    setClipboard(filePaths);
+    showToast(filePaths.length > 1 ? `Copied ${filePaths.length} files` : `Copied "${filePaths[0].split('/').pop()}"`, 'success');
+  };
+
+  // Paste the clipboard's files into the given destination folder (e.g. "xml" or "xml/sub")
+  const handlePaste = async (destFolderPath: string) => {
+    if (!clipboard || clipboard.length === 0) return;
+    try {
+      let pastedCount = 0;
+      for (const sourcePath of clipboard) {
+        const result = await window.electronAPI.copyFile(workspace.path, sourcePath, destFolderPath);
+        if (result.success) pastedCount++;
+      }
+      // Make sure the destination folder is visible so the pasted file(s) show up
+      setExpandedFolders(prev => new Set(prev).add(destFolderPath));
+      onFilesChanged();
+      showToast(pastedCount > 1 ? `Pasted ${pastedCount} files` : `Pasted file`, 'success');
+    } catch (error: any) {
+      const message = error.message || 'Failed to paste file';
+      showToast(message, 'error');
+    }
+  };
+
   // Handle a click on a file tree item, supporting Ctrl/Cmd toggle and Shift range multi-select
   const handleFileItemClick = (e: React.MouseEvent, fullPath: string) => {
     if (e.shiftKey && selectedFile) {
@@ -197,11 +225,27 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         e.preventDefault();
         onFilesChanged();
       }
+
+      // Ctrl/Cmd+C - copy selected file(s) to the in-app clipboard
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const filesToCopy = selectedFiles.size > 0 ? Array.from(selectedFiles) : selectedFile ? [selectedFile] : [];
+        if (filesToCopy.length > 0) {
+          e.preventDefault();
+          handleCopy(filesToCopy);
+        }
+      }
+
+      // Ctrl/Cmd+V - paste clipboard files into the folder containing the selected file
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard && selectedFile) {
+        e.preventDefault();
+        const destFolder = selectedFile.substring(0, selectedFile.lastIndexOf('/'));
+        if (destFolder) handlePaste(destFolder);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFile, selectedFiles, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged, skipDeleteConfirm]);
+  }, [selectedFile, selectedFiles, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged, skipDeleteConfirm, clipboard]);
 
   const handleFolderContextMenu = (e: React.MouseEvent, folderPath: string, rootFolder: 'xml' | 'xsl') => {
     e.preventDefault();
@@ -252,6 +296,20 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleRefreshClick = async () => {
     setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     onFilesChanged();
+  };
+
+  const handlePasteClick = () => {
+    const targetFolder = contextMenu.folderPath;
+    setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+    if (targetFolder) handlePaste(targetFolder);
+  };
+
+  const handleCopyClick = () => {
+    const filesToCopy = selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)
+      ? Array.from(selectedFiles)
+      : contextMenu.filePath ? [contextMenu.filePath] : [];
+    setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+    handleCopy(filesToCopy);
   };
 
   const handleNewFileClick = () => {
@@ -798,6 +856,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
               <div className="context-menu-item" onClick={handleRefreshClick}>
                 Refresh
               </div>
+              {clipboard && clipboard.length > 0 && (
+                <div className="context-menu-item" onClick={handlePasteClick}>
+                  {clipboard.length > 1 ? `Paste ${clipboard.length} Files` : 'Paste'}
+                </div>
+              )}
               {/* Show Rename and Delete only for non-root folders */}
               {contextMenu.folderPath !== 'xml' && contextMenu.folderPath !== 'xsl' && (
                 <>
@@ -813,6 +876,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           )}
           {contextMenu.type === 'file' && (
             <>
+              <div className="context-menu-item" onClick={handleCopyClick}>
+                {selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)
+                  ? `Copy ${selectedFiles.size} Files`
+                  : 'Copy'}
+              </div>
               {!(selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)) && (
                 <div className="context-menu-item" onClick={handleRenameClick}>
                   Rename

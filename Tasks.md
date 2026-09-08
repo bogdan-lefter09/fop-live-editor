@@ -127,11 +127,12 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 ### 🟢 Low Priority (Nice to Have)
 
 10. **Copy/Paste Files**
-    - **Status**: ❌ Not implemented
+    - **Status**: ✅ Implemented
+    - **Implementation**: Added a `copy-file` IPC handler (main.ts) that copies a file into a destination folder, auto-renaming with a "(copy)"/"(copy 2)" suffix on name collisions. `FileExplorer.tsx` keeps an in-app clipboard (`Ctrl+C` / context menu "Copy" on the current selection, including multi-selected files) and pastes via `Ctrl+V` (into the selected file's folder) or the folder context menu's "Paste" item.
     - **Target**: Context menu "Copy" and "Paste" for files
     - **Impact**: Convenience - duplicate files easily
     - **Complexity**: Medium - clipboard management, file duplication
-    - **IPC Handlers**: `copy-file`, `paste-file`
+    - **IPC Handlers**: `copy-file` (paste is implemented client-side by calling `copy-file` with the destination folder)
 
 11. **Drag-and-Drop File Organization**
     - **Status**: ❌ Not implemented
