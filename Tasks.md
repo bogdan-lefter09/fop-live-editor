@@ -136,10 +136,11 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
     - **IPC Handlers**: `copy-file` (paste is implemented client-side by calling `copy-file` with the destination folder)
 
 11. **Drag-and-Drop File Organization**
-    - **Status**: ❌ Not implemented
+    - **Status**: ✅ Implemented
     - **Target**: Drag files between folders visually
     - **Impact**: Better UX - intuitive file organization
     - **Complexity**: High - drag-drop API, visual feedback, move operations
+    - **Notes**: Files are `draggable`; dragging a multi-selected file carries the whole selection. Folders (including the `xml`/`xsl` roots) highlight as drop targets via a `drag-over` class and accept drops, moving files with a new `move-file` IPC handler (`fs.renameSync`, no-op if already in the target folder, errors on name collision). Moves are undoable with Ctrl+Z alongside rename/delete.
 
 12. **Toast Notifications**
     - **Status**: ❌ Not implemented

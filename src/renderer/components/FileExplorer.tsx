@@ -27,7 +27,8 @@ interface ContextMenuState {
 type UndoAction =
   | { type: 'rename-file'; oldPath: string; newPath: string }
   | { type: 'rename-folder'; oldPath: string; newPath: string }
-  | { type: 'delete-file'; filePath: string; fileName: string; content: string };
+  | { type: 'delete-file'; filePath: string; fileName: string; content: string }
+  | { type: 'move-file'; oldPath: string; newPath: string };
 
 
 export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesChanged, onFileRenamed, onFileDeleted }: FileExplorerProps) => {
@@ -54,6 +55,8 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   // Undo history for rename/delete operations (Ctrl+Z). Kept in a ref since nothing
   // renders based on its contents - only its presence/order matters.
   const undoStackRef = useRef<UndoAction[]>([]);
+  // Drag-and-drop file organization: which folder (if any) the dragged file is currently over
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['xml', 'xsl'])); // Track which folders are expanded
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +265,15 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         await window.electronAPI.saveFile(fullPath, action.content);
         onFilesChanged();
         showToast(`Restored "${action.fileName}"`, 'success');
+      } else if (action.type === 'move-file') {
+        const originalFolder = action.oldPath.substring(0, action.oldPath.lastIndexOf('/'));
+        const result = await window.electronAPI.moveFile(workspace.path, action.newPath, originalFolder);
+        if (result.success) {
+          onFileRenamed(action.newPath, result.newPath);
+          setExpandedFolders(prev => new Set(prev).add(originalFolder));
+          onFilesChanged();
+          showToast(`Undid move of "${action.newPath.split('/').pop()}"`, 'success');
+        }
       }
     } catch (error: any) {
       showToast(error.message || 'Failed to undo', 'error');
@@ -274,6 +286,66 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     const action = stack[stack.length - 1];
     undoStackRef.current = stack.slice(0, -1);
     performUndo(action);
+  };
+
+  // Drag-and-drop file organization: start dragging a file (or the whole multi-selection if
+  // the dragged file is part of it), carrying the list of relative paths in the drag payload.
+  const handleFileDragStart = (e: React.DragEvent, fullPath: string) => {
+    const filesToMove = selectedFiles.size > 1 && selectedFiles.has(fullPath) ? Array.from(selectedFiles) : [fullPath];
+    e.dataTransfer.setData('application/x-fop-files', JSON.stringify(filesToMove));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folderPath: string) => {
+    if (!e.dataTransfer.types.includes('application/x-fop-files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFolder(folderPath);
+  };
+
+  const handleFolderDragLeave = (folderPath: string) => {
+    setDragOverFolder(prev => (prev === folderPath ? null : prev));
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, destFolderPath: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFolder(null);
+
+    const data = e.dataTransfer.getData('application/x-fop-files');
+    if (!data) return;
+
+    let filePaths: string[];
+    try {
+      filePaths = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(filePaths) || filePaths.length === 0) return;
+
+    let movedCount = 0;
+    for (const sourcePath of filePaths) {
+      const currentFolder = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+      if (currentFolder === destFolderPath) continue; // already there, nothing to do
+
+      try {
+        const result = await window.electronAPI.moveFile(workspace.path, sourcePath, destFolderPath);
+        if (result.success && result.oldPath !== result.newPath) {
+          movedCount++;
+          onFileRenamed(result.oldPath, result.newPath);
+          pushUndo({ type: 'move-file', oldPath: result.oldPath, newPath: result.newPath });
+        }
+      } catch (error: any) {
+        showToast(error.message || 'Failed to move file', 'error');
+      }
+    }
+
+    if (movedCount > 0) {
+      setExpandedFolders(prev => new Set(prev).add(destFolderPath));
+      setSelectedFiles(new Set());
+      onFilesChanged();
+      showToast(movedCount > 1 ? `Moved ${movedCount} files` : 'Moved file', 'success');
+    }
   };
 
   // Keyboard shortcuts (Delete, F5, Copy/Paste, Undo)
@@ -742,10 +814,13 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         return (
           <div key={fullPath}>
             <div
-              className={`file-tree-item folder ${selectedFile === fullPath ? 'selected' : ''}`}
+              className={`file-tree-item folder ${selectedFile === fullPath ? 'selected' : ''} ${dragOverFolder === fullPath ? 'drag-over' : ''}`}
               style={{ paddingLeft }}
               onClick={() => toggleFolder(fullPath)}
               onContextMenu={(e) => handleFolderContextMenu(e, fullPath, rootFolder)}
+              onDragOver={(e) => handleFolderDragOver(e, fullPath)}
+              onDragLeave={() => handleFolderDragLeave(fullPath)}
+              onDrop={(e) => handleFolderDrop(e, fullPath)}
             >
               <span className="folder-icon">{isExpanded ? '📂' : '📁'}</span> {item.name}
             </div>
@@ -817,6 +892,8 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
             key={fullPath}
             className={`file-tree-item ${selectedFiles.has(fullPath) ? 'selected' : ''}`}
             style={{ paddingLeft }}
+            draggable
+            onDragStart={(e) => handleFileDragStart(e, fullPath)}
             onClick={(e) => handleFileItemClick(e, fullPath)}
             onContextMenu={(e) => handleFileContextMenu(e, fullPath, rootFolder)}
           >
@@ -841,9 +918,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
         {/* XML Root Folder */}
         <div 
-          className={`file-tree-item folder ${selectedFile === 'xml' ? 'selected' : ''}`}
+          className={`file-tree-item folder ${selectedFile === 'xml' ? 'selected' : ''} ${dragOverFolder === 'xml' ? 'drag-over' : ''}`}
           onClick={() => toggleFolder('xml')}
           onContextMenu={(e) => handleFolderContextMenu(e, 'xml', 'xml')}
+          onDragOver={(e) => handleFolderDragOver(e, 'xml')}
+          onDragLeave={() => handleFolderDragLeave('xml')}
+          onDrop={(e) => handleFolderDrop(e, 'xml')}
         >
           <span className="folder-icon">{expandedFolders.has('xml') ? '📂' : '📁'}</span> xml
         </div>
@@ -885,9 +965,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
         {/* XSL Root Folder */}
         <div 
-          className={`file-tree-item folder ${selectedFile === 'xsl' ? 'selected' : ''}`}
+          className={`file-tree-item folder ${selectedFile === 'xsl' ? 'selected' : ''} ${dragOverFolder === 'xsl' ? 'drag-over' : ''}`}
           onClick={() => toggleFolder('xsl')}
           onContextMenu={(e) => handleFolderContextMenu(e, 'xsl', 'xsl')}
+          onDragOver={(e) => handleFolderDragOver(e, 'xsl')}
+          onDragLeave={() => handleFolderDragLeave('xsl')}
+          onDrop={(e) => handleFolderDrop(e, 'xsl')}
         >
           <span className="folder-icon">{expandedFolders.has('xsl') ? '📂' : '📁'}</span> xsl
         </div>

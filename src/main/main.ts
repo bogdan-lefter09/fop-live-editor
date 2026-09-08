@@ -857,6 +857,52 @@ ipcMain.handle('copy-file', async (_event, workspacePath: string, sourceRelative
   }
 });
 
+// Move a file into a different folder (used by drag-and-drop file organization)
+ipcMain.handle('move-file', async (_event, workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => {
+  try {
+    const normalizedSource = sourceRelativePath.replace(/\//g, path.sep);
+    const sourceFullPath = path.join(workspacePath, normalizedSource);
+
+    if (!fs.existsSync(sourceFullPath)) {
+      throw new Error('Source file not found');
+    }
+    if (fs.statSync(sourceFullPath).isDirectory()) {
+      throw new Error('Cannot move folders');
+    }
+
+    const normalizedDestFolder = destFolderRelativePath.replace(/\//g, path.sep);
+    const destFolderFullPath = path.join(workspacePath, normalizedDestFolder);
+    if (!fs.existsSync(destFolderFullPath)) {
+      fs.mkdirSync(destFolderFullPath, { recursive: true });
+    }
+
+    const fileName = path.basename(sourceFullPath);
+    const destFullPath = path.join(destFolderFullPath, fileName);
+    const normalizedOldPath = sourceRelativePath.replace(/\\/g, '/');
+
+    if (path.resolve(destFullPath) === path.resolve(sourceFullPath)) {
+      // Already in the target folder - nothing to do
+      return { success: true, oldPath: normalizedOldPath, newPath: normalizedOldPath };
+    }
+
+    if (fs.existsSync(destFullPath)) {
+      throw new Error(`A file named "${fileName}" already exists in the destination folder`);
+    }
+
+    fs.renameSync(sourceFullPath, destFullPath);
+
+    const destFolderName = destFolderRelativePath.replace(/\\/g, '/');
+    const newRelativePath = `${destFolderName}/${fileName}`;
+
+    console.log('Moved file:', sourceFullPath, '->', destFullPath);
+
+    return { success: true, oldPath: normalizedOldPath, newPath: newRelativePath };
+  } catch (error: any) {
+    console.error('Error moving file:', error);
+    throw error;
+  }
+});
+
 // Create folder
 ipcMain.handle('create-folder', async (_event, workspacePath: string, parentFolderPath: string, folderName: string) => {
   try {

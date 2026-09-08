@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveWorkspaceSettings: (workspacePath: string, settings: any) => ipcRenderer.invoke('save-workspace-settings', workspacePath, settings),
   createFile: (workspacePath: string, folderName: string, fileName: string) => ipcRenderer.invoke('create-file', workspacePath, folderName, fileName),
   copyFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => ipcRenderer.invoke('copy-file', workspacePath, sourceRelativePath, destFolderRelativePath),
+  moveFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => ipcRenderer.invoke('move-file', workspacePath, sourceRelativePath, destFolderRelativePath),
   createFolder: (workspacePath: string, parentFolderPath: string, folderName: string) => ipcRenderer.invoke('create-folder', workspacePath, parentFolderPath, folderName),
   deleteFolder: (workspacePath: string, folderPath: string) => ipcRenderer.invoke('delete-folder', workspacePath, folderPath),
   renameFolder: (workspacePath: string, oldFolderPath: string, newFolderName: string) => ipcRenderer.invoke('rename-folder', workspacePath, oldFolderPath, newFolderName),

@@ -331,6 +331,12 @@ body, html {
   border-left: 2px solid #007acc;
 }
 
+.file-tree-item.drag-over {
+  background: #094771;
+  outline: 1px dashed #007acc;
+  outline-offset: -1px;
+}
+
 .file-tree-item.folder {
   font-weight: 500;
 }

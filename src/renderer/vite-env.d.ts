@@ -52,6 +52,11 @@ declare global {
       success: boolean;
       newPath: string;
     }>;
+    moveFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => Promise<{
+      success: boolean;
+      oldPath: string;
+      newPath: string;
+    }>;
     renameFile: (workspacePath: string, oldRelativePath: string, newFileName: string) => Promise<{
       success: boolean;
       oldPath: string;
