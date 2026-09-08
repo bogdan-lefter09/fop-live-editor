@@ -444,6 +444,27 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     setDeleteConfirm({ show: false, filePath: '', fileName: '' });
   };
 
+  // Pick an icon based on file extension so different file types are visually distinct
+  const getFileIcon = (fileName: string): string => {
+    const ext = fileName.toLowerCase().split('.').pop();
+    switch (ext) {
+      case 'xml':
+        return '📰';
+      case 'xsl':
+      case 'xslt':
+        return '🎨';
+      case 'pdf':
+        return '📕';
+      case 'json':
+        return '🗂️';
+      case 'txt':
+      case 'md':
+        return '📝';
+      default:
+        return '📄';
+    }
+  };
+
   // Recursive function to render file tree
   const renderFileTree = (items: FileTreeItem[], rootFolder: 'xml' | 'xsl', parentPath: string = rootFolder, depth: number = 1) => {
     return items.map((item) => {
@@ -509,7 +530,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
             {/* Show file creation input */}
             {isCreatingFile && creatingInFolder === fullPath && isExpanded && (
               <div className="file-tree-item file-create" style={{ paddingLeft: `${(depth + 2) * 14}px` }}>
-                <span className="file-icon">📄</span>
+                <span className="file-icon">{getFileIcon(newFileName || rootFolder)}</span>
                 <input
                   ref={inputRef}
                   type="text"
@@ -530,7 +551,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         if (renamingFile === fullPath) {
           return (
             <div key={fullPath} className="file-tree-item file-create" style={{ paddingLeft }}>
-              <span className="file-icon">📄</span>
+              <span className="file-icon">{getFileIcon(newFileName || renamingFile)}</span>
               <input
                 ref={renameInputRef}
                 type="text"
@@ -554,7 +575,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
             onClick={() => { setSelectedFile(fullPath); onFileClick(fullPath); }}
             onContextMenu={(e) => handleFileContextMenu(e, fullPath, rootFolder)}
           >
-            <span className="file-icon">📄</span> {item.name}
+            <span className="file-icon">{getFileIcon(item.name)}</span> {item.name}
           </div>
         );
       }
@@ -582,7 +603,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         {/* File/Folder creation in XML root */}
         {isCreatingFile && creatingInFolder === 'xml' && expandedFolders.has('xml') && (
           <div className="file-tree-item file-create" style={{ paddingLeft: '28px' }}>
-            <span className="file-icon">📄</span>
+            <span className="file-icon">{getFileIcon(newFileName || 'xml')}</span>
             <input
               ref={inputRef}
               type="text"
@@ -626,7 +647,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         {/* File/Folder creation in XSL root */}
         {isCreatingFile && creatingInFolder === 'xsl' && expandedFolders.has('xsl') && (
           <div className="file-tree-item file-create" style={{ paddingLeft: '28px' }}>
-            <span className="file-icon">📄</span>
+            <span className="file-icon">{getFileIcon(newFileName || 'xsl')}</span>
             <input
               ref={inputRef}
               type="text"
