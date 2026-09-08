@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Workspace, WorkspaceFiles, FileTreeItem } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useToast } from '../context/ToastContext';
 
 interface FileExplorerProps {
   workspace: Workspace;
@@ -22,6 +23,7 @@ interface ContextMenuState {
 }
 
 export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesChanged, onFileRenamed, onFileDeleted }: FileExplorerProps) => {
+  const { showToast } = useToast();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [creatingInFolder, setCreatingInFolder] = useState<string | null>(null); // Full path like "xml" or "xml/subfolder"
@@ -263,9 +265,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         
         // Refresh file list
         onFilesChanged();
+        showToast(`Renamed to "${newFileName}"`, 'success');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to rename file');
+      const message = err.message || 'Failed to rename file';
+      setError(message);
+      showToast(message, 'error');
     }
   };
 
@@ -303,9 +308,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         
         // Refresh file list
         onFilesChanged();
+        showToast(`Renamed to "${newFolderName}"`, 'success');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to rename folder');
+      const message = err.message || 'Failed to rename folder';
+      setError(message);
+      showToast(message, 'error');
     }
   };
 
@@ -411,17 +419,21 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         const result = await window.electronAPI.deleteFolder(workspace.path, deleteConfirm.filePath);
         if (result.success) {
           onFilesChanged();
+          showToast(`Deleted folder "${deleteConfirm.fileName}"`, 'success');
         }
       } else {
         const result = await window.electronAPI.deleteFile(workspace.path, deleteConfirm.filePath);
         if (result.success) {
           onFileDeleted(deleteConfirm.filePath);
           onFilesChanged();
+          showToast(`Deleted "${deleteConfirm.fileName}"`, 'success');
         }
       }
     } catch (error: any) {
       console.error(`Error deleting ${deleteConfirm.isFolder ? 'folder' : 'file'}:`, error);
-      setError(error.message || `Failed to delete ${deleteConfirm.isFolder ? 'folder' : 'file'}`);
+      const message = error.message || `Failed to delete ${deleteConfirm.isFolder ? 'folder' : 'file'}`;
+      setError(message);
+      showToast(message, 'error');
       setTimeout(() => setError(''), 3000);
     } finally {
       setDeleteConfirm({ show: false, filePath: '', fileName: '' });

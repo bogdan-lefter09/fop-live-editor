@@ -12,10 +12,12 @@ import { EditorPane } from './components/EditorPane';
 import { PdfViewer } from './components/PdfViewer';
 import { LogPanel } from './components/LogPanel';
 import FopSettingsDialog from './components/FopSettingsDialog';
+import { useToast } from './context/ToastContext';
 import { Workspace, OpenFile } from './types';
 import './App.css';
 
 function AppContent() {
+  const { showToast } = useToast();
   const {
     workspaces,
     setWorkspaces,
@@ -708,9 +710,10 @@ function AppContent() {
         originalContent: file.content
       };
       setOpenFiles(updatedFiles);
+      showToast(`Saved "${file.name}"`, 'success');
     } catch (error) {
       console.error('Error saving file:', error);
-      alert(`Failed to save file: ${error}`);
+      showToast(`Failed to save file: ${error}`, 'error');
     }
   };
 
