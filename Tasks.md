@@ -104,7 +104,8 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Location**: `src/renderer/components/FileExplorer.tsx`
 
 7. **Undo Operations (Rename/Delete)**
-   - **Status**: ❌ Not implemented
+   - **Status**: ✅ Implemented
+   - **Implementation**: `FileExplorer.tsx` keeps a capped (last 20) undo history for renames (file and folder) and single-file deletes. `Ctrl+Z` (guarded so it doesn't hijack Monaco's own undo) pops the most recent action: a rename is reversed by renaming back to the original name, and a delete is reversed by restoring the file's content (backed up before the delete) via `save-file`. Folder delete is intentionally not undoable - restoring a recursively-deleted folder tree safely was out of scope for this simple stack-based approach.
    - **Current**: No way to undo file operations
    - **Target**: Ctrl+Z to undo recent rename/delete operations
    - **Impact**: Safety - recover from mistakes

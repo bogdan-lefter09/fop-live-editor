@@ -22,6 +22,14 @@ interface ContextMenuState {
   rootFolder: 'xml' | 'xsl' | null; // Which root folder this belongs to
 }
 
+// Undoable operations (Ctrl+Z). Folder delete is intentionally excluded - restoring a
+// recursively-deleted folder tree safely is out of scope for this simple undo stack.
+type UndoAction =
+  | { type: 'rename-file'; oldPath: string; newPath: string }
+  | { type: 'rename-folder'; oldPath: string; newPath: string }
+  | { type: 'delete-file'; filePath: string; fileName: string; content: string };
+
+
 export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesChanged, onFileRenamed, onFileDeleted }: FileExplorerProps) => {
   const { showToast } = useToast();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
@@ -43,6 +51,9 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const visibleFilesOrder = useRef<string[]>([]);
   // In-app clipboard for copy/paste of files (Ctrl+C / Ctrl+V, or the context menu)
   const [clipboard, setClipboard] = useState<string[] | null>(null);
+  // Undo history for rename/delete operations (Ctrl+Z). Kept in a ref since nothing
+  // renders based on its contents - only its presence/order matters.
+  const undoStackRef = useRef<UndoAction[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['xml', 'xsl'])); // Track which folders are expanded
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +106,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   }, [renamingFolder]);
 
+  // Record an undoable operation (Ctrl+Z), capping history so it can't grow unbounded
+  const pushUndo = (action: UndoAction) => {
+    undoStackRef.current = [...undoStackRef.current, action].slice(-20);
+  };
+
   // Delete a file or folder, showing a toast and refreshing the tree on success
   const performDelete = async (filePath: string, fileName: string, isFolder?: boolean) => {
     try {
@@ -105,11 +121,23 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           showToast(`Deleted folder "${fileName}"`, 'success');
         }
       } else {
+        // Back up the file's content so the delete can be undone with Ctrl+Z
+        let contentBackup: string | null = null;
+        try {
+          const fullPath = `${workspace.path}\\${filePath.replace(/\//g, '\\')}`;
+          contentBackup = await window.electronAPI.readFile(fullPath);
+        } catch {
+          // If we can't read it, undo just won't be available for this delete
+        }
+
         const result = await window.electronAPI.deleteFile(workspace.path, filePath);
         if (result.success) {
           onFileDeleted(filePath);
           onFilesChanged();
           showToast(`Deleted "${fileName}"`, 'success');
+          if (contentBackup !== null) {
+            pushUndo({ type: 'delete-file', filePath, fileName, content: contentBackup });
+          }
         }
       }
     } catch (error: any) {
@@ -203,8 +231,60 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     onFileClick(fullPath);
   };
 
-  // Keyboard shortcuts (Delete and F5)
+  // Reverse the most recent undoable operation (rename or single-file delete)
+  const performUndo = async (action: UndoAction) => {
+    try {
+      if (action.type === 'rename-file') {
+        const originalName = action.oldPath.split('/').pop() || '';
+        const result = await window.electronAPI.renameFile(workspace.path, action.newPath, originalName);
+        if (result.success) {
+          onFileRenamed(action.newPath, result.newPath);
+          onFilesChanged();
+          showToast(`Undid rename to "${originalName}"`, 'success');
+        }
+      } else if (action.type === 'rename-folder') {
+        const originalName = action.oldPath.split('/').pop() || '';
+        const result = await window.electronAPI.renameFolder(workspace.path, action.newPath, originalName);
+        if (result.success) {
+          setExpandedFolders(prev => {
+            const next = new Set(prev);
+            if (next.has(result.oldPath)) {
+              next.delete(result.oldPath);
+              next.add(result.newPath);
+            }
+            return next;
+          });
+          onFilesChanged();
+          showToast(`Undid folder rename to "${originalName}"`, 'success');
+        }
+      } else if (action.type === 'delete-file') {
+        const fullPath = `${workspace.path}\\${action.filePath.replace(/\//g, '\\')}`;
+        await window.electronAPI.saveFile(fullPath, action.content);
+        onFilesChanged();
+        showToast(`Restored "${action.fileName}"`, 'success');
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Failed to undo', 'error');
+    }
+  };
+
+  const handleUndo = () => {
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const action = stack[stack.length - 1];
+    undoStackRef.current = stack.slice(0, -1);
+    performUndo(action);
+  };
+
+  // Keyboard shortcuts (Delete, F5, Copy/Paste, Undo)
   useEffect(() => {
+    // Guard the new clipboard/undo shortcuts from hijacking text editing (Monaco editor,
+    // inputs, textareas, contenteditable) elsewhere in the app.
+    const isTypingElsewhere = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.closest?.('.monaco-editor')));
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input field
       if (isCreatingFile || isCreatingFolder || renamingFile || renamingFolder) return;
@@ -226,6 +306,8 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         onFilesChanged();
       }
 
+      if (isTypingElsewhere()) return;
+
       // Ctrl/Cmd+C - copy selected file(s) to the in-app clipboard
       if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         const filesToCopy = selectedFiles.size > 0 ? Array.from(selectedFiles) : selectedFile ? [selectedFile] : [];
@@ -240,6 +322,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         e.preventDefault();
         const destFolder = selectedFile.substring(0, selectedFile.lastIndexOf('/'));
         if (destFolder) handlePaste(destFolder);
+      }
+
+      // Ctrl/Cmd+Z - undo the last rename/delete operation
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && undoStackRef.current.length > 0) {
+        e.preventDefault();
+        handleUndo();
       }
     };
 
@@ -426,6 +514,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         // Refresh file list
         onFilesChanged();
         showToast(`Renamed to "${newFileName}"`, 'success');
+        pushUndo({ type: 'rename-file', oldPath: result.oldPath, newPath: result.newPath });
       }
     } catch (err: any) {
       const message = err.message || 'Failed to rename file';
@@ -469,6 +558,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         // Refresh file list
         onFilesChanged();
         showToast(`Renamed to "${newFolderName}"`, 'success');
+        pushUndo({ type: 'rename-folder', oldPath: result.oldPath, newPath: result.newPath });
       }
     } catch (err: any) {
       const message = err.message || 'Failed to rename folder';
