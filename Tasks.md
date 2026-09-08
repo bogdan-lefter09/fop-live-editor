@@ -95,7 +95,8 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Location**: `src/main/main.ts` (file watcher setup), `src/main/preload.ts`, `src/renderer/App.tsx`
 
 6. **Multi-Select Files**
-   - **Status**: ❌ Not implemented
+   - **Status**: ✅ Implemented
+   - **Implementation**: `FileExplorer.tsx` tracks a `selectedFiles` set alongside the single-select anchor. Ctrl/Cmd-click toggles a file in/out of the selection, Shift-click selects a contiguous range (using visible-file order tracked during render). The Delete key and the right-click context menu's "Delete" now bulk-delete the whole selection (single confirmation dialog) when more than one file is selected; Rename is hidden from the context menu while a multi-selection is active.
    - **Current**: Can only select one file at a time
    - **Target**: Ctrl+Click or Shift+Click to select multiple files, bulk operations
    - **Impact**: Efficiency - bulk delete, bulk open, etc.

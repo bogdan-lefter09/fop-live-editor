@@ -35,8 +35,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const [newFileName, setNewFileName] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [error, setError] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; filePath: string; fileName: string; isFolder?: boolean }>({ show: false, filePath: '', fileName: '' });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; filePath: string; fileName: string; isFolder?: boolean; bulkPaths?: string[] }>({ show: false, filePath: '', fileName: '' });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // Multi-select support (files only): the set of currently selected file paths,
+  // and a ref tracking the order in which files are visible for Shift-click range selection.
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const visibleFilesOrder = useRef<string[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['xml', 'xsl'])); // Track which folders are expanded
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -124,17 +128,68 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   };
 
+  // Delete multiple selected files at once, showing a single confirmation (unless skipped)
+  const requestBulkDelete = (filePaths: string[]) => {
+    if (filePaths.length <= 1) {
+      const filePath = filePaths[0];
+      if (filePath) requestDelete(filePath, filePath.split('/').pop() || filePath, false);
+      return;
+    }
+    if (skipDeleteConfirm) {
+      filePaths.forEach(filePath => performDelete(filePath, filePath.split('/').pop() || filePath, false));
+      setSelectedFiles(new Set());
+    } else {
+      setDeleteConfirm({ show: true, filePath: '', fileName: `${filePaths.length} files`, isFolder: false, bulkPaths: filePaths });
+    }
+  };
+
+  // Handle a click on a file tree item, supporting Ctrl/Cmd toggle and Shift range multi-select
+  const handleFileItemClick = (e: React.MouseEvent, fullPath: string) => {
+    if (e.shiftKey && selectedFile) {
+      const order = visibleFilesOrder.current;
+      const anchorIndex = order.indexOf(selectedFile);
+      const targetIndex = order.indexOf(fullPath);
+      if (anchorIndex !== -1 && targetIndex !== -1) {
+        const [start, end] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+        setSelectedFiles(new Set(order.slice(start, end + 1)));
+        return;
+      }
+    }
+
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedFiles(prev => {
+        const next = new Set(prev);
+        if (next.has(fullPath)) {
+          next.delete(fullPath);
+        } else {
+          next.add(fullPath);
+        }
+        return next;
+      });
+      setSelectedFile(fullPath);
+      return;
+    }
+
+    setSelectedFiles(new Set([fullPath]));
+    setSelectedFile(fullPath);
+    onFileClick(fullPath);
+  };
+
   // Keyboard shortcuts (Delete and F5)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input field
       if (isCreatingFile || isCreatingFolder || renamingFile || renamingFolder) return;
 
-      // Delete key - delete selected file
-      if (e.key === 'Delete' && selectedFile) {
+      // Delete key - delete selected file(s)
+      if (e.key === 'Delete' && (selectedFiles.size > 0 || selectedFile)) {
         e.preventDefault();
-        const fileName = selectedFile.split('/').pop() || selectedFile;
-        requestDelete(selectedFile, fileName);
+        if (selectedFiles.size > 1) {
+          requestBulkDelete(Array.from(selectedFiles));
+        } else if (selectedFile) {
+          const fileName = selectedFile.split('/').pop() || selectedFile;
+          requestDelete(selectedFile, fileName);
+        }
       }
 
       // F5 key - refresh workspace
@@ -146,7 +201,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFile, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged, skipDeleteConfirm]);
+  }, [selectedFile, selectedFiles, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged, skipDeleteConfirm]);
 
   const handleFolderContextMenu = (e: React.MouseEvent, folderPath: string, rootFolder: 'xml' | 'xsl') => {
     e.preventDefault();
@@ -165,6 +220,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleFileContextMenu = (e: React.MouseEvent, filePath: string, rootFolder: 'xml' | 'xsl') => {
     e.preventDefault();
     e.stopPropagation();
+    // Preserve an existing multi-selection if right-clicking a file that's part of it;
+    // otherwise collapse selection to just this file, like most file explorers.
+    if (!selectedFiles.has(filePath)) {
+      setSelectedFiles(new Set([filePath]));
+      setSelectedFile(filePath);
+    }
     setContextMenu({
       show: true,
       x: e.clientX,
@@ -440,8 +501,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
   const handleDeleteClick = () => {
     if (contextMenu.filePath) {
-      const fileName = contextMenu.filePath.split('/').pop() || contextMenu.filePath;
-      requestDelete(contextMenu.filePath, fileName, false);
+      if (selectedFiles.size > 1 && selectedFiles.has(contextMenu.filePath)) {
+        requestBulkDelete(Array.from(selectedFiles));
+      } else {
+        const fileName = contextMenu.filePath.split('/').pop() || contextMenu.filePath;
+        requestDelete(contextMenu.filePath, fileName, false);
+      }
       setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     }
   };
@@ -459,7 +524,14 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       setSkipDeleteConfirm(true);
       window.electronAPI.setSkipDeleteConfirm(true);
     }
-    await performDelete(deleteConfirm.filePath, deleteConfirm.fileName, deleteConfirm.isFolder);
+    if (deleteConfirm.bulkPaths && deleteConfirm.bulkPaths.length > 1) {
+      await Promise.all(deleteConfirm.bulkPaths.map(filePath =>
+        performDelete(filePath, filePath.split('/').pop() || filePath, false)
+      ));
+      setSelectedFiles(new Set());
+    } else {
+      await performDelete(deleteConfirm.filePath, deleteConfirm.fileName, deleteConfirm.isFolder);
+    }
     setDeleteConfirm({ show: false, filePath: '', fileName: '' });
   };
 
@@ -571,6 +643,8 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         );
       } else {
         // File - use fullPath which already includes parent path
+        visibleFilesOrder.current.push(fullPath);
+
         if (renamingFile === fullPath) {
           return (
             <div key={fullPath} className="file-tree-item file-create" style={{ paddingLeft }}>
@@ -593,9 +667,9 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         return (
           <div
             key={fullPath}
-            className={`file-tree-item ${selectedFile === fullPath ? 'selected' : ''}`}
+            className={`file-tree-item ${selectedFiles.has(fullPath) ? 'selected' : ''}`}
             style={{ paddingLeft }}
-            onClick={() => { setSelectedFile(fullPath); onFileClick(fullPath); }}
+            onClick={(e) => handleFileItemClick(e, fullPath)}
             onContextMenu={(e) => handleFileContextMenu(e, fullPath, rootFolder)}
           >
             <span className="file-icon">{getFileIcon(item.name)}</span> {item.name}
@@ -604,6 +678,10 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       }
     });
   };
+
+  // Reset the visible-file order tracked for Shift-click range selection; repopulated
+  // synchronously below as renderFileTree walks the (expanded) xml/xsl trees.
+  visibleFilesOrder.current = [];
 
   return (
     <div className="file-explorer">
@@ -735,11 +813,15 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           )}
           {contextMenu.type === 'file' && (
             <>
-              <div className="context-menu-item" onClick={handleRenameClick}>
-                Rename
-              </div>
+              {!(selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)) && (
+                <div className="context-menu-item" onClick={handleRenameClick}>
+                  Rename
+                </div>
+              )}
               <div className="context-menu-item" onClick={handleDeleteClick}>
-                Delete
+                {selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)
+                  ? `Delete ${selectedFiles.size} Files`
+                  : 'Delete'}
               </div>
             </>
           )}
@@ -749,11 +831,17 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         show={deleteConfirm.show}
-        title={deleteConfirm.isFolder ? "Delete Folder" : "Delete File"}
+        title={
+          deleteConfirm.bulkPaths && deleteConfirm.bulkPaths.length > 1
+            ? "Delete Files"
+            : deleteConfirm.isFolder ? "Delete Folder" : "Delete File"
+        }
         message={
-          deleteConfirm.isFolder
-            ? `Are you sure you want to delete folder '${deleteConfirm.fileName}' and all its contents?`
-            : `Are you sure you want to delete '${deleteConfirm.fileName}'?`
+          deleteConfirm.bulkPaths && deleteConfirm.bulkPaths.length > 1
+            ? `Are you sure you want to delete ${deleteConfirm.bulkPaths.length} selected files?`
+            : deleteConfirm.isFolder
+              ? `Are you sure you want to delete folder '${deleteConfirm.fileName}' and all its contents?`
+              : `Are you sure you want to delete '${deleteConfirm.fileName}'?`
         }
         confirmText="Delete"
         cancelText="Cancel"
