@@ -1251,6 +1251,7 @@ ipcMain.handle('start-file-watcher', async (_event, workspacePath: string) => {
     });
 
     const fileDebounceTimers = new Map<string, NodeJS.Timeout>();
+    let treeRefreshTimer: NodeJS.Timeout | null = null;
 
     const handleFileChange = (filePath: string) => {
       console.log('File changed:', filePath);
@@ -1272,8 +1273,29 @@ ipcMain.handle('start-file-watcher', async (_event, workspacePath: string) => {
       fileDebounceTimers.set(filePath, debounceTimer);
     };
 
+    // Files/folders added or removed externally should refresh the explorer tree,
+    // independent of the PDF-regen debounce used for content changes.
+    const handleTreeChange = (changedPath: string) => {
+      console.log('File tree changed:', changedPath);
+
+      if (treeRefreshTimer) {
+        clearTimeout(treeRefreshTimer);
+      }
+
+      treeRefreshTimer = setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.webContents.send('workspace-files-changed', { workspacePath });
+        }
+        treeRefreshTimer = null;
+      }, 300);
+    };
+
     watcher
       .on('change', handleFileChange)
+      .on('add', handleTreeChange)
+      .on('unlink', handleTreeChange)
+      .on('addDir', handleTreeChange)
+      .on('unlinkDir', handleTreeChange)
       .on('error', (error) => console.error('Watcher error:', error));
 
     workspaceWatchers.set(workspacePath, { watcher, debounceTimer: null });

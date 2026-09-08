@@ -86,12 +86,13 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 ### 🟡 Medium Priority (Important Enhancements)
 
 5. **Auto-Refresh on External File Changes**
-   - **Status**: ❌ Not implemented
+   - **Status**: ✅ Implemented
+   - **Implementation**: The chokidar watcher now listens for `add`/`unlink`/`addDir`/`unlinkDir` (previously only `change`) and emits a separately-debounced `workspace-files-changed` IPC event. The renderer subscribes via `onWorkspaceFilesChanged` and re-scans the workspace tree when the event matches the active workspace.
    - **Current**: File watchers only trigger PDF generation, not UI refresh
    - **Target**: Automatically detect and update UI when files added/removed externally
    - **Impact**: Seamless workflow with external tools
    - **Complexity**: Medium - extend chokidar watchers to send UI update events
-   - **Location**: `src/main/main.ts` (file watcher setup)
+   - **Location**: `src/main/main.ts` (file watcher setup), `src/main/preload.ts`, `src/renderer/App.tsx`
 
 6. **Multi-Select Files**
    - **Status**: ❌ Not implemented

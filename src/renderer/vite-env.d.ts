@@ -96,6 +96,7 @@ declare global {
     startFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
     stopFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
     onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => (() => void);
+    onWorkspaceFilesChanged: (callback: (data: { workspacePath: string }) => void) => (() => void);
 
     // Global settings functions
     getGlobalSettings: () => Promise<{ lastOpenedWorkspaces: string[]; recentWorkspaces: string[] }>;

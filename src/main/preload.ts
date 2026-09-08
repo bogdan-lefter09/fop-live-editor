@@ -58,6 +58,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-changed', listener);
     return () => ipcRenderer.removeListener('file-changed', listener);
   },
+  onWorkspaceFilesChanged: (callback: (data: { workspacePath: string }) => void) => {
+    const listener = (_event: any, data: { workspacePath: string }) => callback(data);
+    ipcRenderer.on('workspace-files-changed', listener);
+    return () => ipcRenderer.removeListener('workspace-files-changed', listener);
+  },
 
   // Global settings functions
   getGlobalSettings: () => ipcRenderer.invoke('get-global-settings'),

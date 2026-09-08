@@ -215,6 +215,14 @@ function AppContent() {
 
     const cleanup1 = window.electronAPI.onFileChanged(handleFileChanged);
 
+    // External add/remove of files or folders should refresh the explorer tree
+    const handleWorkspaceFilesChanged = (data: { workspacePath: string }) => {
+      const workspace = workspacesRef.current.find(w => w.path === data.workspacePath);
+      if (!workspace || workspace.id !== activeWorkspaceIdRef.current) return;
+      loadWorkspaceFiles(data.workspacePath);
+    };
+    const cleanup1b = window.electronAPI.onWorkspaceFilesChanged(handleWorkspaceFilesChanged);
+
     // Listen for workspace restoration - restore tabs without auto-activating
     const cleanup2 = window.electronAPI.onRestoreWorkspaces(async (workspacePaths: string[]) => {
       const restoredWorkspaces: Workspace[] = [];
@@ -242,6 +250,7 @@ function AppContent() {
 
     return () => {
       cleanup1();
+      cleanup1b();
       cleanup2();
     };
   }, []);
