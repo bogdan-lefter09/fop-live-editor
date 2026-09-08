@@ -86,6 +86,9 @@ function AppContent() {
   const [searchError, setSearchError] = useState('');
   const [searchExpandedFiles, setSearchExpandedFiles] = useState<Set<string>>(new Set());
 
+  // Pending highlight for a search match, applied once its file's editor instance mounts
+  const [pendingHighlight, setPendingHighlight] = useState<{ line: number; column?: number; matchLength?: number } | null>(null);
+
   // PDF panel resize
   const [pdfPanelPct, setPdfPanelPct] = useState(33);
   const [isDragging, setIsDragging] = useState(false);
@@ -539,7 +542,29 @@ function AppContent() {
       .catch(err => console.error('Failed to save open workspaces:', err));
   }, [workspaces]);
 
-  const handleFileClick = async (filePath: string) => {
+  // Scroll to and select the given line (and optional column range) in the currently mounted editor
+  const revealLineInEditor = (line: number, column?: number, matchLength?: number) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    editor.revealLineInCenter(line);
+
+    const model = editor.getModel();
+    const startColumn = column ?? 1;
+    const endColumn = column !== undefined && matchLength !== undefined
+      ? column + matchLength
+      : (model?.getLineMaxColumn(line) ?? startColumn);
+
+    editor.setSelection({
+      startLineNumber: line,
+      startColumn,
+      endLineNumber: line,
+      endColumn,
+    });
+    editor.focus();
+  };
+
+  const handleFileClick = async (filePath: string, line?: number, column?: number, matchLength?: number) => {
     if (!activeWorkspace) return;
 
     // Normalize path separators - convert forward slashes to backslashes
@@ -555,7 +580,13 @@ function AppContent() {
       return normalizedOpenPath === normalizedFullPath;
     });
     if (existingIndex !== -1) {
-      setActiveFileIndex(existingIndex);
+      if (existingIndex === activeFileIndex) {
+        // Already the active tab - its editor instance is already mounted, highlight now
+        if (line !== undefined) revealLineInEditor(line, column, matchLength);
+      } else {
+        setActiveFileIndex(existingIndex);
+        if (line !== undefined) setPendingHighlight({ line, column, matchLength });
+      }
       return;
     }
 
@@ -571,6 +602,7 @@ function AppContent() {
 
       setOpenFiles([...openFiles, newFile]);
       setActiveFileIndex(openFiles.length);
+      if (line !== undefined) setPendingHighlight({ line, column, matchLength });
     } catch (error) {
       console.error('Error loading file:', error);
       alert(`Failed to load file: ${error}`);
@@ -963,7 +995,13 @@ function AppContent() {
                         activeFileIndex={activeFileIndex}
                         editorReloadKey={editorReloadKey}
                         onEditorChange={handleEditorChange}
-                        onEditorMount={(editor) => { editorRef.current = editor; }}
+                        onEditorMount={(editor) => {
+                          editorRef.current = editor;
+                          if (pendingHighlight) {
+                            revealLineInEditor(pendingHighlight.line, pendingHighlight.column, pendingHighlight.matchLength);
+                            setPendingHighlight(null);
+                          }
+                        }}
                         onCloseFile={handleCloseFile}
                         onSelectFile={setActiveFileIndex}
                       />

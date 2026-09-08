@@ -159,10 +159,12 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
     - **Location**: `src/renderer/components/FileExplorer.tsx`
 
 15. **Search Results Highlighting in Editor**
-    - **Status**: ❌ Not implemented
+    - **Status**: ✅ Implemented
+    - **Implementation**: `App.tsx` now accepts an optional line/column/matchLength from `SearchPanel`'s `onFileClick`; the matched line is revealed (`revealLineInCenter`) and selected in Monaco. If the target file's editor isn't mounted yet (new tab or switching tabs), the highlight is deferred via a `pendingHighlight` state applied on `onEditorMount`.
     - **Target**: Click search result → open file → highlight matched line in editor
     - **Impact**: Navigation - faster to find searched text
     - **Complexity**: Medium - Monaco editor API integration
+    - **Location**: `src/renderer/App.tsx`, `src/renderer/components/SearchPanel.tsx`
 
 ## 💡 Implementation Recommendations
 
