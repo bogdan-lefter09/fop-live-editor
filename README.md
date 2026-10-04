@@ -111,3 +111,16 @@ This will create an installer in the `release/` folder.
 - Bundled JRE and FOP not included in repository (download separately)
 - Workspaces store settings in `.fop-editor-workspace.json`
 - Windows x64 only, portable ZIP and NSIS installer available
+
+## Testing
+
+| Command | What it runs |
+|---|---|
+| `npm test` | Unit, component and integration tests (Vitest) |
+| `npm run test:unit` / `test:components` / `test:integration` | A single layer |
+| `npm run test:e2e` | Builds the app, then Playwright drives the real Electron app |
+
+Tests that need a real FOP (8 integration tests and 2 E2E tests) use the bundled setup in `assets/bundled/` (see setup above) and are skipped if it is missing. Override with `FOP_DIR`, `GSON_JAR` and `FOP_JAVA_HOME`/`JAVA_HOME`. They also need a JDK with `javac` (via `JAVA_HOME` or `FOP_JAVA_HOME`) to compile `FopServer.java`; the bundled JRE has no compiler.
+
+To run every layer with nothing skipped: `.\tests\run-all.ps1 -JavaHome <JDK dir>` (fails early if FOP, gson or a JDK is missing).
+
