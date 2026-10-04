@@ -103,11 +103,11 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
    - **Complexity**: Medium - state management for selections, UI updates
    - **Location**: `src/renderer/components/FileExplorer.tsx`
 
-7. **Undo Operations (Rename/Delete)**
+7. **Undo Operations (Rename/Move)**
    - **Status**: ✅ Implemented
-   - **Implementation**: `FileExplorer.tsx` keeps a capped (last 20) undo history for renames (file and folder) and single-file deletes. `Ctrl+Z` (guarded so it doesn't hijack Monaco's own undo) pops the most recent action: a rename is reversed by renaming back to the original name, and a delete is reversed by restoring the file's content (backed up before the delete) via `save-file`. Folder delete is intentionally not undoable - restoring a recursively-deleted folder tree safely was out of scope for this simple stack-based approach.
+   - **Implementation**: `FileExplorer.tsx` keeps a capped (last 20) undo history for renames (file and folder) and drag-and-drop moves. `Ctrl+Z` (guarded so it doesn't hijack Monaco's own undo) pops the most recent action and reverses it by renaming/moving back to the original path. Delete is intentionally not undoable - deletions already go through a confirmation dialog (with an optional "don't ask again" toggle) and the OS Recycle Bin, so a separate in-app undo for delete was judged unnecessary complexity.
    - **Current**: No way to undo file operations
-   - **Target**: Ctrl+Z to undo recent rename/delete operations
+   - **Target**: Ctrl+Z to undo recent rename/move operations
    - **Impact**: Safety - recover from mistakes
    - **Complexity**: High - requires operation history tracking
    - **Dependencies**: Works best with Recycle Bin (#1)
@@ -140,7 +140,7 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
     - **Target**: Drag files between folders visually
     - **Impact**: Better UX - intuitive file organization
     - **Complexity**: High - drag-drop API, visual feedback, move operations
-    - **Notes**: Files are `draggable`; dragging a multi-selected file carries the whole selection. Folders (including the `xml`/`xsl` roots) highlight as drop targets via a `drag-over` class and accept drops, moving files with a new `move-file` IPC handler (`fs.renameSync`, no-op if already in the target folder, errors on name collision). Moves are undoable with Ctrl+Z alongside rename/delete.
+    - **Notes**: Files are `draggable`; dragging a multi-selected file carries the whole selection. Folders (including the `xml`/`xsl` roots) highlight as drop targets via a `drag-over` class and accept drops, moving files with a new `move-file` IPC handler (`fs.renameSync`, no-op if already in the target folder, errors on name collision). Moves are undoable with Ctrl+Z alongside renames.
 
 12. **Toast Notifications**
     - **Status**: ❌ Not implemented

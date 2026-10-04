@@ -22,12 +22,11 @@ interface ContextMenuState {
   rootFolder: 'xml' | 'xsl' | null; // Which root folder this belongs to
 }
 
-// Undoable operations (Ctrl+Z). Folder delete is intentionally excluded - restoring a
-// recursively-deleted folder tree safely is out of scope for this simple undo stack.
+// Undoable operations (Ctrl+Z). Delete (file or folder) is intentionally excluded from
+// undo - restoring deleted content safely is out of scope for this simple undo stack.
 type UndoAction =
   | { type: 'rename-file'; oldPath: string; newPath: string }
   | { type: 'rename-folder'; oldPath: string; newPath: string }
-  | { type: 'delete-file'; filePath: string; fileName: string; content: string }
   | { type: 'move-file'; oldPath: string; newPath: string };
 
 
@@ -52,8 +51,9 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const visibleFilesOrder = useRef<string[]>([]);
   // In-app clipboard for copy/paste of files (Ctrl+C / Ctrl+V, or the context menu)
   const [clipboard, setClipboard] = useState<string[] | null>(null);
-  // Undo history for rename/delete operations (Ctrl+Z). Kept in a ref since nothing
-  // renders based on its contents - only its presence/order matters.
+  // Undo history for rename/move operations (Ctrl+Z). Kept in a ref since nothing
+  // renders based on its contents - only its presence/order matters. Delete is
+  // intentionally not undoable (see requestDelete/performDelete).
   const undoStackRef = useRef<UndoAction[]>([]);
   // Drag-and-drop file organization: which folder (if any) the dragged file is currently over
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
@@ -124,23 +124,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           showToast(`Deleted folder "${fileName}"`, 'success');
         }
       } else {
-        // Back up the file's content so the delete can be undone with Ctrl+Z
-        let contentBackup: string | null = null;
-        try {
-          const fullPath = `${workspace.path}\\${filePath.replace(/\//g, '\\')}`;
-          contentBackup = await window.electronAPI.readFile(fullPath);
-        } catch {
-          // If we can't read it, undo just won't be available for this delete
-        }
-
         const result = await window.electronAPI.deleteFile(workspace.path, filePath);
         if (result.success) {
           onFileDeleted(filePath);
           onFilesChanged();
           showToast(`Deleted "${fileName}"`, 'success');
-          if (contentBackup !== null) {
-            pushUndo({ type: 'delete-file', filePath, fileName, content: contentBackup });
-          }
         }
       }
     } catch (error: any) {
@@ -260,11 +248,6 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           onFilesChanged();
           showToast(`Undid folder rename to "${originalName}"`, 'success');
         }
-      } else if (action.type === 'delete-file') {
-        const fullPath = `${workspace.path}\\${action.filePath.replace(/\//g, '\\')}`;
-        await window.electronAPI.saveFile(fullPath, action.content);
-        onFilesChanged();
-        showToast(`Restored "${action.fileName}"`, 'success');
       } else if (action.type === 'move-file') {
         const originalFolder = action.oldPath.substring(0, action.oldPath.lastIndexOf('/'));
         const result = await window.electronAPI.moveFile(workspace.path, action.newPath, originalFolder);
@@ -396,7 +379,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         if (destFolder) handlePaste(destFolder);
       }
 
-      // Ctrl/Cmd+Z - undo the last rename/delete operation
+      // Ctrl/Cmd+Z - undo the last rename/move operation
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && undoStackRef.current.length > 0) {
         e.preventDefault();
         handleUndo();
