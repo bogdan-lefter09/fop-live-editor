@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Workspace, WorkspaceFiles, FileTreeItem } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
+import { useToast } from '../context/ToastContext';
 
 interface FileExplorerProps {
   workspace: Workspace;
@@ -21,8 +22,18 @@ interface ContextMenuState {
   rootFolder: 'xml' | 'xsl' | null; // Which root folder this belongs to
 }
 
+// Undoable operations (Ctrl+Z). Delete (file or folder) is intentionally excluded from
+// undo - restoring deleted content safely is out of scope for this simple undo stack.
+type UndoAction =
+  | { type: 'rename-file'; oldPath: string; newPath: string }
+  | { type: 'rename-folder'; oldPath: string; newPath: string }
+  | { type: 'move-file'; oldPath: string; newPath: string };
+
+
 export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesChanged, onFileRenamed, onFileDeleted }: FileExplorerProps) => {
+  const { showToast } = useToast();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [creatingInFolder, setCreatingInFolder] = useState<string | null>(null); // Full path like "xml" or "xml/subfolder"
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -32,8 +43,20 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const [newFileName, setNewFileName] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [error, setError] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; filePath: string; fileName: string; isFolder?: boolean }>({ show: false, filePath: '', fileName: '' });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; filePath: string; fileName: string; isFolder?: boolean; bulkPaths?: string[] }>({ show: false, filePath: '', fileName: '' });
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  // Multi-select support (files only): the set of currently selected file paths,
+  // and a ref tracking the order in which files are visible for Shift-click range selection.
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const visibleFilesOrder = useRef<string[]>([]);
+  // In-app clipboard for copy/paste of files (Ctrl+C / Ctrl+V, or the context menu)
+  const [clipboard, setClipboard] = useState<string[] | null>(null);
+  // Undo history for rename/move operations (Ctrl+Z). Kept in a ref since nothing
+  // renders based on its contents - only its presence/order matters. Delete is
+  // intentionally not undoable (see requestDelete/performDelete).
+  const undoStackRef = useRef<UndoAction[]>([]);
+  // Drag-and-drop file organization: which folder (if any) the dragged file is currently over
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['xml', 'xsl'])); // Track which folders are expanded
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +71,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       return () => document.removeEventListener('click', handleClick);
     }
   }, [contextMenu.show]);
+
+  // Load "don't ask me again" preference for delete confirmations
+  useEffect(() => {
+    window.electronAPI.getSkipDeleteConfirm().then(setSkipDeleteConfirm);
+  }, []);
 
   // Focus input when creating file
   useEffect(() => {
@@ -81,17 +109,250 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
     }
   }, [renamingFolder]);
 
-  // Keyboard shortcuts (Delete and F5)
+  // Record an undoable operation (Ctrl+Z), capping history so it can't grow unbounded
+  const pushUndo = (action: UndoAction) => {
+    undoStackRef.current = [...undoStackRef.current, action].slice(-20);
+  };
+
+  // Delete a file or folder, showing a toast and refreshing the tree on success
+  const performDelete = async (filePath: string, fileName: string, isFolder?: boolean) => {
+    try {
+      if (isFolder) {
+        const result = await window.electronAPI.deleteFolder(workspace.path, filePath);
+        if (result.success) {
+          onFilesChanged();
+          showToast(`Deleted folder "${fileName}"`, 'success');
+        }
+      } else {
+        const result = await window.electronAPI.deleteFile(workspace.path, filePath);
+        if (result.success) {
+          onFileDeleted(filePath);
+          onFilesChanged();
+          showToast(`Deleted "${fileName}"`, 'success');
+        }
+      }
+    } catch (error: any) {
+      console.error(`Error deleting ${isFolder ? 'folder' : 'file'}:`, error);
+      const message = error.message || `Failed to delete ${isFolder ? 'folder' : 'file'}`;
+      setError(message);
+      showToast(message, 'error');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
+  // Delete a file/folder immediately if the user opted out of confirmations, otherwise show the dialog
+  const requestDelete = (filePath: string, fileName: string, isFolder?: boolean) => {
+    if (skipDeleteConfirm) {
+      performDelete(filePath, fileName, isFolder);
+    } else {
+      setDeleteConfirm({ show: true, filePath, fileName, isFolder });
+    }
+  };
+
+  // Delete multiple selected files at once, showing a single confirmation (unless skipped)
+  const requestBulkDelete = (filePaths: string[]) => {
+    if (filePaths.length <= 1) {
+      const filePath = filePaths[0];
+      if (filePath) requestDelete(filePath, filePath.split('/').pop() || filePath, false);
+      return;
+    }
+    if (skipDeleteConfirm) {
+      filePaths.forEach(filePath => performDelete(filePath, filePath.split('/').pop() || filePath, false));
+      setSelectedFiles(new Set());
+    } else {
+      setDeleteConfirm({ show: true, filePath: '', fileName: `${filePaths.length} files`, isFolder: false, bulkPaths: filePaths });
+    }
+  };
+
+  // Copy currently selected file(s) to the in-app clipboard
+  const handleCopy = (filePaths: string[]) => {
+    if (filePaths.length === 0) return;
+    setClipboard(filePaths);
+    showToast(filePaths.length > 1 ? `Copied ${filePaths.length} files` : `Copied "${filePaths[0].split('/').pop()}"`, 'success');
+  };
+
+  // Paste the clipboard's files into the given destination folder (e.g. "xml" or "xml/sub")
+  const handlePaste = async (destFolderPath: string) => {
+    if (!clipboard || clipboard.length === 0) return;
+    try {
+      let pastedCount = 0;
+      for (const sourcePath of clipboard) {
+        const result = await window.electronAPI.copyFile(workspace.path, sourcePath, destFolderPath);
+        if (result.success) pastedCount++;
+      }
+      // Make sure the destination folder is visible so the pasted file(s) show up
+      setExpandedFolders(prev => new Set(prev).add(destFolderPath));
+      onFilesChanged();
+      showToast(pastedCount > 1 ? `Pasted ${pastedCount} files` : `Pasted file`, 'success');
+    } catch (error: any) {
+      const message = error.message || 'Failed to paste file';
+      showToast(message, 'error');
+    }
+  };
+
+  // Handle a click on a file tree item, supporting Ctrl/Cmd toggle and Shift range multi-select
+  const handleFileItemClick = (e: React.MouseEvent, fullPath: string) => {
+    if (e.shiftKey && selectedFile) {
+      const order = visibleFilesOrder.current;
+      const anchorIndex = order.indexOf(selectedFile);
+      const targetIndex = order.indexOf(fullPath);
+      if (anchorIndex !== -1 && targetIndex !== -1) {
+        const [start, end] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+        setSelectedFiles(new Set(order.slice(start, end + 1)));
+        return;
+      }
+    }
+
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedFiles(prev => {
+        const next = new Set(prev);
+        if (next.has(fullPath)) {
+          next.delete(fullPath);
+        } else {
+          next.add(fullPath);
+        }
+        return next;
+      });
+      setSelectedFile(fullPath);
+      return;
+    }
+
+    setSelectedFiles(new Set([fullPath]));
+    setSelectedFile(fullPath);
+    onFileClick(fullPath);
+  };
+
+  // Reverse the most recent undoable operation (rename or single-file delete)
+  const performUndo = async (action: UndoAction) => {
+    try {
+      if (action.type === 'rename-file') {
+        const originalName = action.oldPath.split('/').pop() || '';
+        const result = await window.electronAPI.renameFile(workspace.path, action.newPath, originalName);
+        if (result.success) {
+          onFileRenamed(action.newPath, result.newPath);
+          onFilesChanged();
+          showToast(`Undid rename to "${originalName}"`, 'success');
+        }
+      } else if (action.type === 'rename-folder') {
+        const originalName = action.oldPath.split('/').pop() || '';
+        const result = await window.electronAPI.renameFolder(workspace.path, action.newPath, originalName);
+        if (result.success) {
+          setExpandedFolders(prev => {
+            const next = new Set(prev);
+            if (next.has(result.oldPath)) {
+              next.delete(result.oldPath);
+              next.add(result.newPath);
+            }
+            return next;
+          });
+          onFilesChanged();
+          showToast(`Undid folder rename to "${originalName}"`, 'success');
+        }
+      } else if (action.type === 'move-file') {
+        const originalFolder = action.oldPath.substring(0, action.oldPath.lastIndexOf('/'));
+        const result = await window.electronAPI.moveFile(workspace.path, action.newPath, originalFolder);
+        if (result.success) {
+          onFileRenamed(action.newPath, result.newPath);
+          setExpandedFolders(prev => new Set(prev).add(originalFolder));
+          onFilesChanged();
+          showToast(`Undid move of "${action.newPath.split('/').pop()}"`, 'success');
+        }
+      }
+    } catch (error: any) {
+      showToast(error.message || 'Failed to undo', 'error');
+    }
+  };
+
+  const handleUndo = () => {
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const action = stack[stack.length - 1];
+    undoStackRef.current = stack.slice(0, -1);
+    performUndo(action);
+  };
+
+  // Drag-and-drop file organization: start dragging a file (or the whole multi-selection if
+  // the dragged file is part of it), carrying the list of relative paths in the drag payload.
+  const handleFileDragStart = (e: React.DragEvent, fullPath: string) => {
+    const filesToMove = selectedFiles.size > 1 && selectedFiles.has(fullPath) ? Array.from(selectedFiles) : [fullPath];
+    e.dataTransfer.setData('application/x-fop-files', JSON.stringify(filesToMove));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folderPath: string) => {
+    if (!e.dataTransfer.types.includes('application/x-fop-files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFolder(folderPath);
+  };
+
+  const handleFolderDragLeave = (folderPath: string) => {
+    setDragOverFolder(prev => (prev === folderPath ? null : prev));
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, destFolderPath: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFolder(null);
+
+    const data = e.dataTransfer.getData('application/x-fop-files');
+    if (!data) return;
+
+    let filePaths: string[];
+    try {
+      filePaths = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(filePaths) || filePaths.length === 0) return;
+
+    let movedCount = 0;
+    for (const sourcePath of filePaths) {
+      const currentFolder = sourcePath.substring(0, sourcePath.lastIndexOf('/'));
+      if (currentFolder === destFolderPath) continue; // already there, nothing to do
+
+      try {
+        const result = await window.electronAPI.moveFile(workspace.path, sourcePath, destFolderPath);
+        if (result.success && result.oldPath !== result.newPath) {
+          movedCount++;
+          onFileRenamed(result.oldPath, result.newPath);
+          pushUndo({ type: 'move-file', oldPath: result.oldPath, newPath: result.newPath });
+        }
+      } catch (error: any) {
+        showToast(error.message || 'Failed to move file', 'error');
+      }
+    }
+
+    if (movedCount > 0) {
+      setExpandedFolders(prev => new Set(prev).add(destFolderPath));
+      setSelectedFiles(new Set());
+      onFilesChanged();
+      showToast(movedCount > 1 ? `Moved ${movedCount} files` : 'Moved file', 'success');
+    }
+  };
+
+  // Keyboard shortcuts (Delete, F5, Copy/Paste, Undo)
   useEffect(() => {
+    // Guard the new clipboard/undo shortcuts from hijacking text editing (Monaco editor,
+    // inputs, textareas, contenteditable) elsewhere in the app.
+    const isTypingElsewhere = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.closest?.('.monaco-editor')));
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input field
       if (isCreatingFile || isCreatingFolder || renamingFile || renamingFolder) return;
 
-      // Delete key - delete selected file
-      if (e.key === 'Delete' && selectedFile) {
+      // Delete key - delete selected file(s)
+      if (e.key === 'Delete' && (selectedFiles.size > 0 || selectedFile)) {
         e.preventDefault();
-        const fileName = selectedFile.split('/').pop() || selectedFile;
-        setDeleteConfirm({ show: true, filePath: selectedFile, fileName });
+        if (selectedFiles.size > 1) {
+          requestBulkDelete(Array.from(selectedFiles));
+        } else if (selectedFile) {
+          const fileName = selectedFile.split('/').pop() || selectedFile;
+          requestDelete(selectedFile, fileName);
+        }
       }
 
       // F5 key - refresh workspace
@@ -99,11 +360,35 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         e.preventDefault();
         onFilesChanged();
       }
+
+      if (isTypingElsewhere()) return;
+
+      // Ctrl/Cmd+C - copy selected file(s) to the in-app clipboard
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const filesToCopy = selectedFiles.size > 0 ? Array.from(selectedFiles) : selectedFile ? [selectedFile] : [];
+        if (filesToCopy.length > 0) {
+          e.preventDefault();
+          handleCopy(filesToCopy);
+        }
+      }
+
+      // Ctrl/Cmd+V - paste clipboard files into the folder containing the selected file
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard && selectedFile) {
+        e.preventDefault();
+        const destFolder = selectedFile.substring(0, selectedFile.lastIndexOf('/'));
+        if (destFolder) handlePaste(destFolder);
+      }
+
+      // Ctrl/Cmd+Z - undo the last rename/move operation
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && undoStackRef.current.length > 0) {
+        e.preventDefault();
+        handleUndo();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFile, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged]);
+  }, [selectedFile, selectedFiles, isCreatingFile, isCreatingFolder, renamingFile, onFilesChanged, skipDeleteConfirm, clipboard]);
 
   const handleFolderContextMenu = (e: React.MouseEvent, folderPath: string, rootFolder: 'xml' | 'xsl') => {
     e.preventDefault();
@@ -122,6 +407,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleFileContextMenu = (e: React.MouseEvent, filePath: string, rootFolder: 'xml' | 'xsl') => {
     e.preventDefault();
     e.stopPropagation();
+    // Preserve an existing multi-selection if right-clicking a file that's part of it;
+    // otherwise collapse selection to just this file, like most file explorers.
+    if (!selectedFiles.has(filePath)) {
+      setSelectedFiles(new Set([filePath]));
+      setSelectedFile(filePath);
+    }
     setContextMenu({
       show: true,
       x: e.clientX,
@@ -148,6 +439,20 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleRefreshClick = async () => {
     setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     onFilesChanged();
+  };
+
+  const handlePasteClick = () => {
+    const targetFolder = contextMenu.folderPath;
+    setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+    if (targetFolder) handlePaste(targetFolder);
+  };
+
+  const handleCopyClick = () => {
+    const filesToCopy = selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)
+      ? Array.from(selectedFiles)
+      : contextMenu.filePath ? [contextMenu.filePath] : [];
+    setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
+    handleCopy(filesToCopy);
   };
 
   const handleNewFileClick = () => {
@@ -263,9 +568,13 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         
         // Refresh file list
         onFilesChanged();
+        showToast(`Renamed to "${newFileName}"`, 'success');
+        pushUndo({ type: 'rename-file', oldPath: result.oldPath, newPath: result.newPath });
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to rename file');
+      const message = err.message || 'Failed to rename file';
+      setError(message);
+      showToast(message, 'error');
     }
   };
 
@@ -303,9 +612,13 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         
         // Refresh file list
         onFilesChanged();
+        showToast(`Renamed to "${newFolderName}"`, 'success');
+        pushUndo({ type: 'rename-folder', oldPath: result.oldPath, newPath: result.newPath });
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to rename folder');
+      const message = err.message || 'Failed to rename folder';
+      setError(message);
+      showToast(message, 'error');
     }
   };
 
@@ -391,8 +704,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
   const handleDeleteClick = () => {
     if (contextMenu.filePath) {
-      const fileName = contextMenu.filePath.split('/').pop() || contextMenu.filePath;
-      setDeleteConfirm({ show: true, filePath: contextMenu.filePath, fileName, isFolder: false });
+      if (selectedFiles.size > 1 && selectedFiles.has(contextMenu.filePath)) {
+        requestBulkDelete(Array.from(selectedFiles));
+      } else {
+        const fileName = contextMenu.filePath.split('/').pop() || contextMenu.filePath;
+        requestDelete(contextMenu.filePath, fileName, false);
+      }
       setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     }
   };
@@ -400,36 +717,50 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
   const handleDeleteFolderClick = () => {
     if (contextMenu.folderPath) {
       const folderName = contextMenu.folderPath.split('/').pop() || contextMenu.folderPath;
-      setDeleteConfirm({ show: true, filePath: contextMenu.folderPath, fileName: folderName, isFolder: true });
+      requestDelete(contextMenu.folderPath, folderName, true);
       setContextMenu({ show: false, x: 0, y: 0, folderPath: null, filePath: null, type: 'folder', rootFolder: null });
     }
   };
 
-  const handleDeleteConfirm = async () => {
-    try {
-      if (deleteConfirm.isFolder) {
-        const result = await window.electronAPI.deleteFolder(workspace.path, deleteConfirm.filePath);
-        if (result.success) {
-          onFilesChanged();
-        }
-      } else {
-        const result = await window.electronAPI.deleteFile(workspace.path, deleteConfirm.filePath);
-        if (result.success) {
-          onFileDeleted(deleteConfirm.filePath);
-          onFilesChanged();
-        }
-      }
-    } catch (error: any) {
-      console.error(`Error deleting ${deleteConfirm.isFolder ? 'folder' : 'file'}:`, error);
-      setError(error.message || `Failed to delete ${deleteConfirm.isFolder ? 'folder' : 'file'}`);
-      setTimeout(() => setError(''), 3000);
-    } finally {
-      setDeleteConfirm({ show: false, filePath: '', fileName: '' });
+  const handleDeleteConfirm = async (skipNextTime?: boolean) => {
+    if (skipNextTime) {
+      setSkipDeleteConfirm(true);
+      window.electronAPI.setSkipDeleteConfirm(true);
     }
+    if (deleteConfirm.bulkPaths && deleteConfirm.bulkPaths.length > 1) {
+      await Promise.all(deleteConfirm.bulkPaths.map(filePath =>
+        performDelete(filePath, filePath.split('/').pop() || filePath, false)
+      ));
+      setSelectedFiles(new Set());
+    } else {
+      await performDelete(deleteConfirm.filePath, deleteConfirm.fileName, deleteConfirm.isFolder);
+    }
+    setDeleteConfirm({ show: false, filePath: '', fileName: '' });
   };
 
   const handleDeleteCancel = () => {
     setDeleteConfirm({ show: false, filePath: '', fileName: '' });
+  };
+
+  // Pick an icon based on file extension so different file types are visually distinct
+  const getFileIcon = (fileName: string): string => {
+    const ext = fileName.toLowerCase().split('.').pop();
+    switch (ext) {
+      case 'xml':
+        return '📰';
+      case 'xsl':
+      case 'xslt':
+        return '🎨';
+      case 'pdf':
+        return '📕';
+      case 'json':
+        return '🗂️';
+      case 'txt':
+      case 'md':
+        return '📝';
+      default:
+        return '📄';
+    }
   };
 
   // Recursive function to render file tree
@@ -466,10 +797,13 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         return (
           <div key={fullPath}>
             <div
-              className={`file-tree-item folder ${selectedFile === fullPath ? 'selected' : ''}`}
+              className={`file-tree-item folder ${selectedFile === fullPath ? 'selected' : ''} ${dragOverFolder === fullPath ? 'drag-over' : ''}`}
               style={{ paddingLeft }}
               onClick={() => toggleFolder(fullPath)}
               onContextMenu={(e) => handleFolderContextMenu(e, fullPath, rootFolder)}
+              onDragOver={(e) => handleFolderDragOver(e, fullPath)}
+              onDragLeave={() => handleFolderDragLeave(fullPath)}
+              onDrop={(e) => handleFolderDrop(e, fullPath)}
             >
               <span className="folder-icon">{isExpanded ? '📂' : '📁'}</span> {item.name}
             </div>
@@ -497,7 +831,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
             {/* Show file creation input */}
             {isCreatingFile && creatingInFolder === fullPath && isExpanded && (
               <div className="file-tree-item file-create" style={{ paddingLeft: `${(depth + 2) * 14}px` }}>
-                <span className="file-icon">📄</span>
+                <span className="file-icon">{getFileIcon(newFileName || rootFolder)}</span>
                 <input
                   ref={inputRef}
                   type="text"
@@ -515,10 +849,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         );
       } else {
         // File - use fullPath which already includes parent path
+        visibleFilesOrder.current.push(fullPath);
+
         if (renamingFile === fullPath) {
           return (
             <div key={fullPath} className="file-tree-item file-create" style={{ paddingLeft }}>
-              <span className="file-icon">📄</span>
+              <span className="file-icon">{getFileIcon(newFileName || renamingFile)}</span>
               <input
                 ref={renameInputRef}
                 type="text"
@@ -537,17 +873,23 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         return (
           <div
             key={fullPath}
-            className={`file-tree-item ${selectedFile === fullPath ? 'selected' : ''}`}
+            className={`file-tree-item ${selectedFiles.has(fullPath) ? 'selected' : ''}`}
             style={{ paddingLeft }}
-            onClick={() => { setSelectedFile(fullPath); onFileClick(fullPath); }}
+            draggable
+            onDragStart={(e) => handleFileDragStart(e, fullPath)}
+            onClick={(e) => handleFileItemClick(e, fullPath)}
             onContextMenu={(e) => handleFileContextMenu(e, fullPath, rootFolder)}
           >
-            <span className="file-icon">📄</span> {item.name}
+            <span className="file-icon">{getFileIcon(item.name)}</span> {item.name}
           </div>
         );
       }
     });
   };
+
+  // Reset the visible-file order tracked for Shift-click range selection; repopulated
+  // synchronously below as renderFileTree walks the (expanded) xml/xsl trees.
+  visibleFilesOrder.current = [];
 
   return (
     <div className="file-explorer">
@@ -559,9 +901,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
         {/* XML Root Folder */}
         <div 
-          className={`file-tree-item folder ${selectedFile === 'xml' ? 'selected' : ''}`}
+          className={`file-tree-item folder ${selectedFile === 'xml' ? 'selected' : ''} ${dragOverFolder === 'xml' ? 'drag-over' : ''}`}
           onClick={() => toggleFolder('xml')}
           onContextMenu={(e) => handleFolderContextMenu(e, 'xml', 'xml')}
+          onDragOver={(e) => handleFolderDragOver(e, 'xml')}
+          onDragLeave={() => handleFolderDragLeave('xml')}
+          onDrop={(e) => handleFolderDrop(e, 'xml')}
         >
           <span className="folder-icon">{expandedFolders.has('xml') ? '📂' : '📁'}</span> xml
         </div>
@@ -570,7 +915,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         {/* File/Folder creation in XML root */}
         {isCreatingFile && creatingInFolder === 'xml' && expandedFolders.has('xml') && (
           <div className="file-tree-item file-create" style={{ paddingLeft: '28px' }}>
-            <span className="file-icon">📄</span>
+            <span className="file-icon">{getFileIcon(newFileName || 'xml')}</span>
             <input
               ref={inputRef}
               type="text"
@@ -603,9 +948,12 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
 
         {/* XSL Root Folder */}
         <div 
-          className={`file-tree-item folder ${selectedFile === 'xsl' ? 'selected' : ''}`}
+          className={`file-tree-item folder ${selectedFile === 'xsl' ? 'selected' : ''} ${dragOverFolder === 'xsl' ? 'drag-over' : ''}`}
           onClick={() => toggleFolder('xsl')}
           onContextMenu={(e) => handleFolderContextMenu(e, 'xsl', 'xsl')}
+          onDragOver={(e) => handleFolderDragOver(e, 'xsl')}
+          onDragLeave={() => handleFolderDragLeave('xsl')}
+          onDrop={(e) => handleFolderDrop(e, 'xsl')}
         >
           <span className="folder-icon">{expandedFolders.has('xsl') ? '📂' : '📁'}</span> xsl
         </div>
@@ -614,7 +962,7 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
         {/* File/Folder creation in XSL root */}
         {isCreatingFile && creatingInFolder === 'xsl' && expandedFolders.has('xsl') && (
           <div className="file-tree-item file-create" style={{ paddingLeft: '28px' }}>
-            <span className="file-icon">📄</span>
+            <span className="file-icon">{getFileIcon(newFileName || 'xsl')}</span>
             <input
               ref={inputRef}
               type="text"
@@ -664,6 +1012,11 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
               <div className="context-menu-item" onClick={handleRefreshClick}>
                 Refresh
               </div>
+              {clipboard && clipboard.length > 0 && (
+                <div className="context-menu-item" onClick={handlePasteClick}>
+                  {clipboard.length > 1 ? `Paste ${clipboard.length} Files` : 'Paste'}
+                </div>
+              )}
               {/* Show Rename and Delete only for non-root folders */}
               {contextMenu.folderPath !== 'xml' && contextMenu.folderPath !== 'xsl' && (
                 <>
@@ -679,11 +1032,20 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
           )}
           {contextMenu.type === 'file' && (
             <>
-              <div className="context-menu-item" onClick={handleRenameClick}>
-                Rename
+              <div className="context-menu-item" onClick={handleCopyClick}>
+                {selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)
+                  ? `Copy ${selectedFiles.size} Files`
+                  : 'Copy'}
               </div>
+              {!(selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)) && (
+                <div className="context-menu-item" onClick={handleRenameClick}>
+                  Rename
+                </div>
+              )}
               <div className="context-menu-item" onClick={handleDeleteClick}>
-                Delete
+                {selectedFiles.size > 1 && contextMenu.filePath && selectedFiles.has(contextMenu.filePath)
+                  ? `Delete ${selectedFiles.size} Files`
+                  : 'Delete'}
               </div>
             </>
           )}
@@ -693,17 +1055,24 @@ export const FileExplorer = ({ workspace, workspaceFiles, onFileClick, onFilesCh
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         show={deleteConfirm.show}
-        title={deleteConfirm.isFolder ? "Delete Folder" : "Delete File"}
+        title={
+          deleteConfirm.bulkPaths && deleteConfirm.bulkPaths.length > 1
+            ? "Delete Files"
+            : deleteConfirm.isFolder ? "Delete Folder" : "Delete File"
+        }
         message={
-          deleteConfirm.isFolder
-            ? `Are you sure you want to delete folder '${deleteConfirm.fileName}' and all its contents?`
-            : `Are you sure you want to delete '${deleteConfirm.fileName}'?`
+          deleteConfirm.bulkPaths && deleteConfirm.bulkPaths.length > 1
+            ? `Are you sure you want to delete ${deleteConfirm.bulkPaths.length} selected files?`
+            : deleteConfirm.isFolder
+              ? `Are you sure you want to delete folder '${deleteConfirm.fileName}' and all its contents?`
+              : `Are you sure you want to delete '${deleteConfirm.fileName}'?`
         }
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
         isDestructive={true}
+        showSkipOption={true}
       />
     </div>
   );

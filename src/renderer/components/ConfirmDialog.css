@@ -42,6 +42,20 @@
   margin: 0;
 }
 
+.confirm-dialog-skip-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: #aaaaaa;
+  cursor: pointer;
+}
+
+.confirm-dialog-skip-option input[type="checkbox"] {
+  cursor: pointer;
+}
+
 .confirm-dialog-footer {
   padding: 12px 20px;
   border-top: 1px solid #3c3c3c;

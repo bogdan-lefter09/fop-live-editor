@@ -48,6 +48,15 @@ declare global {
       success: boolean;
       filePath: string;
     }>;
+    copyFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => Promise<{
+      success: boolean;
+      newPath: string;
+    }>;
+    moveFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => Promise<{
+      success: boolean;
+      oldPath: string;
+      newPath: string;
+    }>;
     renameFile: (workspacePath: string, oldRelativePath: string, newFileName: string) => Promise<{
       success: boolean;
       oldPath: string;
@@ -96,6 +105,7 @@ declare global {
     startFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
     stopFileWatcher: (workspacePath: string) => Promise<{ success: boolean; error?: string }>;
     onFileChanged: (callback: (data: { workspacePath: string, filePath: string }) => void) => (() => void);
+    onWorkspaceFilesChanged: (callback: (data: { workspacePath: string }) => void) => (() => void);
 
     // Global settings functions
     getGlobalSettings: () => Promise<{ lastOpenedWorkspaces: string[]; recentWorkspaces: string[] }>;
@@ -104,12 +114,22 @@ declare global {
     getRecentWorkspaces: () => Promise<string[]>;
     onRestoreWorkspaces: (callback: (workspacePaths: string[]) => void) => (() => void);
 
+    // Delete confirmation preference
+    getSkipDeleteConfirm: () => Promise<boolean>;
+    setSkipDeleteConfirm: (value: boolean) => Promise<{ success: boolean }>;
+
     // FOP Settings functions
     getFopSettings: () => Promise<{ useBundled: boolean; customFopPath: string | null }>;
     saveFopSettings: (settings: { useBundled: boolean; customFopPath?: string }) => Promise<{ success: boolean; error?: string }>;
     validateFopDirectory: (fopPath: string) => Promise<{ valid: boolean; error?: string; fopJar?: string }>;
     selectFopDirectory: () => Promise<{ path: string; validation: { valid: boolean; error?: string; fopJar?: string } } | null>;
     restartApp: () => Promise<{ success: boolean; error?: string }>;
+
+    // JRE Settings functions
+    getJreSettings: () => Promise<{ useBundled: boolean; customJrePath: string | null }>;
+    saveJreSettings: (settings: { useBundled: boolean; customJrePath?: string }) => Promise<{ success: boolean; error?: string }>;
+    validateJreDirectory: (jrePath: string) => Promise<{ valid: boolean; error?: string }>;
+    selectJreDirectory: () => Promise<{ path: string; validation: { valid: boolean; error?: string } } | null>;
 
     // Menu event listeners
     onMenuNewWorkspace: (callback: () => void) => (() => void);

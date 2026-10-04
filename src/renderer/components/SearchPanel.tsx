@@ -3,7 +3,7 @@ import { Workspace } from '../types';
 
 interface SearchPanelProps {
   workspace: Workspace | null;
-  onFileClick: (filePath: string, line?: number) => void;
+  onFileClick: (filePath: string, line?: number, column?: number, matchLength?: number) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   caseSensitive: boolean;
@@ -110,8 +110,8 @@ export const SearchPanel = ({
     setExpandedFiles(newExpanded);
   };
 
-  const handleResultClick = (file: string, line: number) => {
-    onFileClick(file, line);
+  const handleResultClick = (file: string, line: number, column: number, matchLength: number) => {
+    onFileClick(file, line, column, matchLength);
   };
 
   const getTotalMatches = () => {
@@ -212,7 +212,7 @@ export const SearchPanel = ({
                       <div 
                         key={`${result.file}-${match.line}-${index}`}
                         className="search-match-item"
-                        onClick={() => handleResultClick(result.file, match.line)}
+                        onClick={() => handleResultClick(result.file, match.line, match.column, match.matchText.length)}
                       >
                         <span className="search-match-line">{match.line}:</span>
                         <span className="search-match-text">

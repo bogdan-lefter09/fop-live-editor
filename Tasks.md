@@ -86,36 +86,37 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 ### 🟡 Medium Priority (Important Enhancements)
 
 5. **Auto-Refresh on External File Changes**
-   - **Status**: ❌ Not implemented
+   - **Status**: ✅ Implemented
+   - **Implementation**: The chokidar watcher now listens for `add`/`unlink`/`addDir`/`unlinkDir` (previously only `change`) and emits a separately-debounced `workspace-files-changed` IPC event. The renderer subscribes via `onWorkspaceFilesChanged` and re-scans the workspace tree when the event matches the active workspace.
    - **Current**: File watchers only trigger PDF generation, not UI refresh
    - **Target**: Automatically detect and update UI when files added/removed externally
    - **Impact**: Seamless workflow with external tools
    - **Complexity**: Medium - extend chokidar watchers to send UI update events
-   - **Location**: `src/main/main.ts` (file watcher setup)
+   - **Location**: `src/main/main.ts` (file watcher setup), `src/main/preload.ts`, `src/renderer/App.tsx`
 
 6. **Multi-Select Files**
-   - **Status**: ❌ Not implemented
+   - **Status**: ✅ Implemented
+   - **Implementation**: `FileExplorer.tsx` tracks a `selectedFiles` set alongside the single-select anchor. Ctrl/Cmd-click toggles a file in/out of the selection, Shift-click selects a contiguous range (using visible-file order tracked during render). The Delete key and the right-click context menu's "Delete" now bulk-delete the whole selection (single confirmation dialog) when more than one file is selected; Rename is hidden from the context menu while a multi-selection is active.
    - **Current**: Can only select one file at a time
    - **Target**: Ctrl+Click or Shift+Click to select multiple files, bulk operations
    - **Impact**: Efficiency - bulk delete, bulk open, etc.
    - **Complexity**: Medium - state management for selections, UI updates
    - **Location**: `src/renderer/components/FileExplorer.tsx`
 
-7. **Undo Operations (Rename/Delete)**
-   - **Status**: ❌ Not implemented
+7. **Undo Operations (Rename/Move)**
+   - **Status**: ✅ Implemented
+   - **Implementation**: `FileExplorer.tsx` keeps a capped (last 20) undo history for renames (file and folder) and drag-and-drop moves. `Ctrl+Z` (guarded so it doesn't hijack Monaco's own undo) pops the most recent action and reverses it by renaming/moving back to the original path. Delete is intentionally not undoable - deletions already go through a confirmation dialog (with an optional "don't ask again" toggle) and the OS Recycle Bin, so a separate in-app undo for delete was judged unnecessary complexity.
    - **Current**: No way to undo file operations
-   - **Target**: Ctrl+Z to undo recent rename/delete operations
+   - **Target**: Ctrl+Z to undo recent rename/move operations
    - **Impact**: Safety - recover from mistakes
    - **Complexity**: High - requires operation history tracking
    - **Dependencies**: Works best with Recycle Bin (#1)
 
 8. **Settings UI Screen**
-   - **Status**: ❌ Not implemented
-   - **Current**: Global settings exist but no UI to modify them
-   - **Target**: Settings panel for custom JRE/FOP paths, preferences
+   - **Status**: ✅ Implemented
+   - **Implementation**: New gear icon in the icon bar opens `SettingsDialog.tsx`, covering FOP version, JRE path (new: `jreConfig` in electron-store + `get/save-jre-settings`, `validate-jre-directory`, `select-jre-directory` IPC handlers), and the delete-confirmation preference in one place. `getFopPaths()` in `main.ts` now resolves `javaExe` from the custom JRE path when configured instead of always using the bundled JRE.
    - **Impact**: Flexibility - advanced users can customize environment
-   - **Complexity**: Medium - new UI panel, validation logic
-   - **Location**: New component `src/renderer/components/SettingsPanel.tsx`
+   - **Location**: `src/renderer/components/SettingsDialog.tsx`, `src/main/main.ts`
    - **Note**: FopServer.java is compiled with `--release 8` for maximum compatibility (Java 8+). Bundled JRE 21 runs Java 8 bytecode without issues. Custom JRE requires minimum Java 8.
 
 9. **Ctrl+W to Close Tabs**
@@ -127,17 +128,19 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
 ### 🟢 Low Priority (Nice to Have)
 
 10. **Copy/Paste Files**
-    - **Status**: ❌ Not implemented
+    - **Status**: ✅ Implemented
+    - **Implementation**: Added a `copy-file` IPC handler (main.ts) that copies a file into a destination folder, auto-renaming with a "(copy)"/"(copy 2)" suffix on name collisions. `FileExplorer.tsx` keeps an in-app clipboard (`Ctrl+C` / context menu "Copy" on the current selection, including multi-selected files) and pastes via `Ctrl+V` (into the selected file's folder) or the folder context menu's "Paste" item.
     - **Target**: Context menu "Copy" and "Paste" for files
     - **Impact**: Convenience - duplicate files easily
     - **Complexity**: Medium - clipboard management, file duplication
-    - **IPC Handlers**: `copy-file`, `paste-file`
+    - **IPC Handlers**: `copy-file` (paste is implemented client-side by calling `copy-file` with the destination folder)
 
 11. **Drag-and-Drop File Organization**
-    - **Status**: ❌ Not implemented
+    - **Status**: ✅ Implemented
     - **Target**: Drag files between folders visually
     - **Impact**: Better UX - intuitive file organization
     - **Complexity**: High - drag-drop API, visual feedback, move operations
+    - **Notes**: Files are `draggable`; dragging a multi-selected file carries the whole selection. Folders (including the `xml`/`xsl` roots) highlight as drop targets via a `drag-over` class and accept drops, moving files with a new `move-file` IPC handler (`fs.renameSync`, no-op if already in the target folder, errors on name collision). Moves are undoable with Ctrl+Z alongside renames.
 
 12. **Toast Notifications**
     - **Status**: ❌ Not implemented
@@ -161,10 +164,12 @@ Electron app with a React+Vite renderer (UI) and an Electron main process that m
     - **Location**: `src/renderer/components/FileExplorer.tsx`
 
 15. **Search Results Highlighting in Editor**
-    - **Status**: ❌ Not implemented
+    - **Status**: ✅ Implemented
+    - **Implementation**: `App.tsx` now accepts an optional line/column/matchLength from `SearchPanel`'s `onFileClick`; the matched line is revealed (`revealLineInCenter`) and selected in Monaco. If the target file's editor isn't mounted yet (new tab or switching tabs), the highlight is deferred via a `pendingHighlight` state applied on `onEditorMount`.
     - **Target**: Click search result → open file → highlight matched line in editor
     - **Impact**: Navigation - faster to find searched text
     - **Complexity**: Medium - Monaco editor API integration
+    - **Location**: `src/renderer/App.tsx`, `src/renderer/components/SearchPanel.tsx`
 
 ## 💡 Implementation Recommendations
 
@@ -872,8 +877,8 @@ On Windows, anti-virus / Windows Defender can flag bundled executables — test 
 ### Monaco Editor Find Widget Button Alignment
 **Issue:** When pressing Ctrl+F in the Monaco editor, the find bar appears but the toggle buttons (case sensitive, whole word, regex) are misaligned vertically. The buttons appear slightly below the find input box instead of being properly centered with it.
 
-**Status:** Unresolved - CSS fixes attempted but did not solve the alignment issue.
+**Status:** Fix applied - added a scoped CSS rule (`.monaco-editor .find-widget .button`/`.monaco-custom-checkbox { box-sizing: border-box !important; }` in `App.css`) re-asserting the `box-sizing` Monaco expects on the toggle buttons, since it was losing out to other cascading rules once embedded in the app. Please re-verify visually and update this status if the issue persists.
 
-**Workaround:** None currently - the find functionality still works, but the visual alignment is incorrect.
+**Workaround:** None needed if the fix holds - the find functionality was never broken, only the visual alignment.
 
-**Next Steps:** This may require investigating Monaco Editor's internal CSS structure or potentially filing an issue with the `@monaco-editor/react` package to understand the proper way to override the default styling.
+**Next Steps:** N/A unless the issue resurfaces, in which case compare the find widget's rendered DOM against Monaco's own `editor.main.css` to find the next conflicting rule.

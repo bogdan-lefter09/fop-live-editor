@@ -20,9 +20,14 @@ const store = new Store({
     lastOpenedWorkspaces: [],
     recentWorkspaces: [],
     maxRecentWorkspaces: 10,
+    skipDeleteConfirm: false,
     fopConfig: {
       useBundled: true,
       customFopPath: null
+    },
+    jreConfig: {
+      useBundled: true,
+      customJrePath: null
     }
   }
 });
@@ -396,6 +401,7 @@ function handleFopServerResponse(response: any) {
 // Helper: Get bundled resource paths
 function getFopPaths() {
   const fopConfig = store.get('fopConfig') as any;
+  const jreConfig = store.get('jreConfig') as any;
   
   // Always get bundled resources path for server components
   let bundledResourcesPath: string;
@@ -404,11 +410,15 @@ function getFopPaths() {
   } else {
     bundledResourcesPath = path.join(process.resourcesPath, 'bundled');
   }
+
+  const javaExe = (!jreConfig.useBundled && jreConfig.customJrePath)
+    ? path.join(jreConfig.customJrePath, 'bin/java.exe')
+    : path.join(bundledResourcesPath, 'jre/bin/java.exe');
   
   if (!fopConfig.useBundled && fopConfig.customFopPath) {
-    // Use custom FOP installation with bundled Java and server
+    // Use custom FOP installation with (possibly custom) Java and bundled server
     return {
-      javaExe: path.join(bundledResourcesPath, 'jre/bin/java.exe'),
+      javaExe,
       fopJar: path.join(fopConfig.customFopPath, 'build/fop-2.11.jar'),
       fopDir: fopConfig.customFopPath,
       serverDir: path.join(bundledResourcesPath, 'fop/server'), // Always use bundled server
@@ -417,7 +427,7 @@ function getFopPaths() {
   
   // Use bundled FOP installation
   return {
-    javaExe: path.join(bundledResourcesPath, 'jre/bin/java.exe'),
+    javaExe,
     fopJar: path.join(bundledResourcesPath, 'fop/build/fop-2.11.jar'),
     fopDir: path.join(bundledResourcesPath, 'fop'),
     serverDir: path.join(bundledResourcesPath, 'fop/server'),
@@ -796,6 +806,99 @@ ipcMain.handle('create-file', async (_event, workspacePath: string, folderName: 
     };
   } catch (error: any) {
     console.error('Error creating file:', error);
+    throw error;
+  }
+});
+
+// Copy a file into a destination folder, auto-renaming to avoid overwriting an existing file
+ipcMain.handle('copy-file', async (_event, workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => {
+  try {
+    const normalizedSource = sourceRelativePath.replace(/\//g, path.sep);
+    const sourceFullPath = path.join(workspacePath, normalizedSource);
+
+    if (!fs.existsSync(sourceFullPath)) {
+      throw new Error('Source file not found');
+    }
+    if (fs.statSync(sourceFullPath).isDirectory()) {
+      throw new Error('Cannot copy folders');
+    }
+
+    const normalizedDestFolder = destFolderRelativePath.replace(/\//g, path.sep);
+    const destFolderFullPath = path.join(workspacePath, normalizedDestFolder);
+    if (!fs.existsSync(destFolderFullPath)) {
+      fs.mkdirSync(destFolderFullPath, { recursive: true });
+    }
+
+    const originalName = path.basename(sourceFullPath);
+    const ext = path.extname(originalName);
+    const baseName = path.basename(originalName, ext);
+
+    // Find a non-colliding destination filename, appending " (copy)", " (copy 2)", etc.
+    let candidateName = originalName;
+    let destFullPath = path.join(destFolderFullPath, candidateName);
+    let counter = 1;
+    while (fs.existsSync(destFullPath)) {
+      candidateName = counter === 1 ? `${baseName} (copy)${ext}` : `${baseName} (copy ${counter})${ext}`;
+      destFullPath = path.join(destFolderFullPath, candidateName);
+      counter++;
+    }
+
+    fs.copyFileSync(sourceFullPath, destFullPath);
+
+    const destFolderName = destFolderRelativePath.replace(/\\/g, '/');
+    const newRelativePath = `${destFolderName}/${candidateName}`;
+
+    console.log('Copied file:', sourceFullPath, '->', destFullPath);
+
+    return { success: true, newPath: newRelativePath };
+  } catch (error: any) {
+    console.error('Error copying file:', error);
+    throw error;
+  }
+});
+
+// Move a file into a different folder (used by drag-and-drop file organization)
+ipcMain.handle('move-file', async (_event, workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => {
+  try {
+    const normalizedSource = sourceRelativePath.replace(/\//g, path.sep);
+    const sourceFullPath = path.join(workspacePath, normalizedSource);
+
+    if (!fs.existsSync(sourceFullPath)) {
+      throw new Error('Source file not found');
+    }
+    if (fs.statSync(sourceFullPath).isDirectory()) {
+      throw new Error('Cannot move folders');
+    }
+
+    const normalizedDestFolder = destFolderRelativePath.replace(/\//g, path.sep);
+    const destFolderFullPath = path.join(workspacePath, normalizedDestFolder);
+    if (!fs.existsSync(destFolderFullPath)) {
+      fs.mkdirSync(destFolderFullPath, { recursive: true });
+    }
+
+    const fileName = path.basename(sourceFullPath);
+    const destFullPath = path.join(destFolderFullPath, fileName);
+    const normalizedOldPath = sourceRelativePath.replace(/\\/g, '/');
+
+    if (path.resolve(destFullPath) === path.resolve(sourceFullPath)) {
+      // Already in the target folder - nothing to do
+      return { success: true, oldPath: normalizedOldPath, newPath: normalizedOldPath };
+    }
+
+    if (fs.existsSync(destFullPath)) {
+      throw new Error(`A file named "${fileName}" already exists in the destination folder`);
+    }
+
+    fs.renameSync(sourceFullPath, destFullPath);
+
+    const destFolderName = destFolderRelativePath.replace(/\\/g, '/');
+    const newRelativePath = `${destFolderName}/${fileName}`;
+
+    console.log('Moved file:', sourceFullPath, '->', destFullPath);
+
+    return { success: true, oldPath: normalizedOldPath, newPath: newRelativePath };
+  } catch (error: any) {
+    console.error('Error moving file:', error);
     throw error;
   }
 });
@@ -1241,6 +1344,7 @@ ipcMain.handle('start-file-watcher', async (_event, workspacePath: string) => {
     });
 
     const fileDebounceTimers = new Map<string, NodeJS.Timeout>();
+    let treeRefreshTimer: NodeJS.Timeout | null = null;
 
     const handleFileChange = (filePath: string) => {
       console.log('File changed:', filePath);
@@ -1262,8 +1366,29 @@ ipcMain.handle('start-file-watcher', async (_event, workspacePath: string) => {
       fileDebounceTimers.set(filePath, debounceTimer);
     };
 
+    // Files/folders added or removed externally should refresh the explorer tree,
+    // independent of the PDF-regen debounce used for content changes.
+    const handleTreeChange = (changedPath: string) => {
+      console.log('File tree changed:', changedPath);
+
+      if (treeRefreshTimer) {
+        clearTimeout(treeRefreshTimer);
+      }
+
+      treeRefreshTimer = setTimeout(() => {
+        if (mainWindow) {
+          mainWindow.webContents.send('workspace-files-changed', { workspacePath });
+        }
+        treeRefreshTimer = null;
+      }, 300);
+    };
+
     watcher
       .on('change', handleFileChange)
+      .on('add', handleTreeChange)
+      .on('unlink', handleTreeChange)
+      .on('addDir', handleTreeChange)
+      .on('unlinkDir', handleTreeChange)
       .on('error', (error) => console.error('Watcher error:', error));
 
     workspaceWatchers.set(workspacePath, { watcher, debounceTimer: null });
@@ -1341,6 +1466,16 @@ ipcMain.handle('get-recent-workspaces', async () => {
   return existing;
 });
 
+// Delete confirmation preference ("don't ask me again")
+ipcMain.handle('get-skip-delete-confirm', async () => {
+  return store.get('skipDeleteConfirm', false);
+});
+
+ipcMain.handle('set-skip-delete-confirm', async (_event, value: boolean) => {
+  store.set('skipDeleteConfirm', value);
+  return { success: true };
+});
+
 // FOP Settings handlers
 ipcMain.handle('get-fop-settings', async () => {
   const fopConfig = store.get('fopConfig') as any;
@@ -1413,6 +1548,67 @@ ipcMain.handle('select-fop-directory', async () => {
   // Validate the selected directory
   const validation = await validateFopDirectory(selectedPath);
   
+  return {
+    path: selectedPath,
+    validation: validation
+  };
+});
+
+// JRE Settings handlers
+ipcMain.handle('get-jre-settings', async () => {
+  const jreConfig = store.get('jreConfig') as any;
+  return {
+    useBundled: jreConfig.useBundled ?? true,
+    customJrePath: jreConfig.customJrePath ?? null
+  };
+});
+
+ipcMain.handle('save-jre-settings', async (_event, settings: { useBundled: boolean; customJrePath?: string }) => {
+  try {
+    store.set('jreConfig', settings);
+    return { success: true };
+  } catch (error) {
+    console.error('Error saving JRE settings:', error);
+    return { success: false, error: 'Failed to save settings' };
+  }
+});
+
+ipcMain.handle('validate-jre-directory', async (_event, jrePath: string) => {
+  return await validateJreDirectory(jrePath);
+});
+
+// Helper function to validate a JRE/JDK directory
+async function validateJreDirectory(jrePath: string) {
+  try {
+    if (!jrePath || !fs.existsSync(jrePath)) {
+      return { valid: false, error: 'Directory does not exist' };
+    }
+
+    const javaExe = path.join(jrePath, 'bin', 'java.exe');
+    if (!fs.existsSync(javaExe)) {
+      return { valid: false, error: 'No bin/java.exe found in this directory' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('Error validating JRE directory:', error);
+    return { valid: false, error: 'Failed to validate directory' };
+  }
+}
+
+ipcMain.handle('select-jre-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select JRE Directory'
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const selectedPath = result.filePaths[0];
+  const validation = await validateJreDirectory(selectedPath);
+
   return {
     path: selectedPath,
     validation: validation

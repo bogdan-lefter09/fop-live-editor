@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadWorkspaceSettings: (workspacePath: string) => ipcRenderer.invoke('load-workspace-settings', workspacePath),
   saveWorkspaceSettings: (workspacePath: string, settings: any) => ipcRenderer.invoke('save-workspace-settings', workspacePath, settings),
   createFile: (workspacePath: string, folderName: string, fileName: string) => ipcRenderer.invoke('create-file', workspacePath, folderName, fileName),
+  copyFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => ipcRenderer.invoke('copy-file', workspacePath, sourceRelativePath, destFolderRelativePath),
+  moveFile: (workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => ipcRenderer.invoke('move-file', workspacePath, sourceRelativePath, destFolderRelativePath),
   createFolder: (workspacePath: string, parentFolderPath: string, folderName: string) => ipcRenderer.invoke('create-folder', workspacePath, parentFolderPath, folderName),
   deleteFolder: (workspacePath: string, folderPath: string) => ipcRenderer.invoke('delete-folder', workspacePath, folderPath),
   renameFolder: (workspacePath: string, oldFolderPath: string, newFolderName: string) => ipcRenderer.invoke('rename-folder', workspacePath, oldFolderPath, newFolderName),
@@ -58,6 +60,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-changed', listener);
     return () => ipcRenderer.removeListener('file-changed', listener);
   },
+  onWorkspaceFilesChanged: (callback: (data: { workspacePath: string }) => void) => {
+    const listener = (_event: any, data: { workspacePath: string }) => callback(data);
+    ipcRenderer.on('workspace-files-changed', listener);
+    return () => ipcRenderer.removeListener('workspace-files-changed', listener);
+  },
 
   // Global settings functions
   getGlobalSettings: () => ipcRenderer.invoke('get-global-settings'),
@@ -70,12 +77,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('restore-workspaces', listener);
   },
 
+  // Delete confirmation preference
+  getSkipDeleteConfirm: () => ipcRenderer.invoke('get-skip-delete-confirm'),
+  setSkipDeleteConfirm: (value: boolean) => ipcRenderer.invoke('set-skip-delete-confirm', value),
+
   // FOP Settings functions
   getFopSettings: () => ipcRenderer.invoke('get-fop-settings'),
   saveFopSettings: (settings: { useBundled: boolean; customFopPath?: string }) => ipcRenderer.invoke('save-fop-settings', settings),
   validateFopDirectory: (fopPath: string) => ipcRenderer.invoke('validate-fop-directory', fopPath),
   selectFopDirectory: () => ipcRenderer.invoke('select-fop-directory'),
   restartApp: () => ipcRenderer.invoke('restart-app'),
+
+  // JRE Settings functions
+  getJreSettings: () => ipcRenderer.invoke('get-jre-settings'),
+  saveJreSettings: (settings: { useBundled: boolean; customJrePath?: string }) => ipcRenderer.invoke('save-jre-settings', settings),
+  validateJreDirectory: (jrePath: string) => ipcRenderer.invoke('validate-jre-directory', jrePath),
+  selectJreDirectory: () => ipcRenderer.invoke('select-jre-directory'),
 
   // Menu event listeners
   onMenuNewWorkspace: (callback: () => void) => {
