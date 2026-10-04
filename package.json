@@ -12,7 +12,13 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "package": "npm run build && electron-builder --win --x64",
     "package:dev": "npm run build && node -r dotenv/config node_modules/electron-builder/out/cli/cli.js --win --x64",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:components": "vitest run --project components",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "npm run build && playwright test",
+    "test:watch": "vitest --project unit --project components"
   },
   "keywords": [
     "electron",
@@ -24,6 +30,11 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.42",
     "@types/react-dom": "^18.2.17",
@@ -34,9 +45,11 @@
     "electron": "^39.1.2",
     "electron-builder": "^24.9.1",
     "electronmon": "^2.0.2",
+    "jsdom": "^29.1.1",
     "typescript": "^5.3.3",
     "vite": "^7.2.2",
     "vite-plugin-electron": "^0.28.0",
+    "vitest": "^3.2.7",
     "wait-on": "^9.0.3"
   },
   "dependencies": {

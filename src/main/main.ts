@@ -5,8 +5,15 @@ import { spawn, ChildProcess } from 'child_process';
 import { autoUpdater } from 'electron-updater';
 import chokidar from 'chokidar';
 import Store from 'electron-store';
+import * as ops from './workspaceOps';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+// Test seams: E2E tests run the built renderer (no Vite dev server) with an isolated settings directory.
+const isE2E = process.env.FOP_EDITOR_E2E === '1';
+if (process.env.FOP_EDITOR_USER_DATA) {
+  app.setPath('userData', process.env.FOP_EDITOR_USER_DATA);
+}
 
 let mainWindow: BrowserWindow | null = null;
 let fopServerProcess: ChildProcess | null = null;
@@ -55,7 +62,7 @@ function createWindow() {
     },
   });
 
-  if (isDev) {
+  if (isDev && !isE2E) {
     mainWindow.loadURL('http://localhost:5173').catch(err => {
       console.error('Failed to load URL:', err);
     });
@@ -153,10 +160,18 @@ function createApplicationMenu() {
 
 app.whenReady().then(() => {
   createWindow();
-  startFopServer(); // Start FOP server on app startup
+
+  // Start FOP server on app startup; a missing FOP/JRE must not break the rest of the app
+  try {
+    startFopServer();
+  } catch (error) {
+    console.error('Failed to start FOP server:', error);
+  }
 
   // Check for updates
-  setupAutoUpdater();
+  if (!isE2E) {
+    setupAutoUpdater();
+  }
 
   // Restore last opened workspaces
   setTimeout(() => {
@@ -405,7 +420,9 @@ function getFopPaths() {
   
   // Always get bundled resources path for server components
   let bundledResourcesPath: string;
-  if (isDev) {
+  if (process.env.FOP_EDITOR_BUNDLED_DIR) {
+    bundledResourcesPath = process.env.FOP_EDITOR_BUNDLED_DIR;
+  } else if (isDev) {
     bundledResourcesPath = path.join(app.getAppPath(), 'assets/bundled');
   } else {
     bundledResourcesPath = path.join(process.resourcesPath, 'bundled');
@@ -459,34 +476,7 @@ ipcMain.handle('select-folder', async () => {
 // Get files from directory (recursively)
 ipcMain.handle('get-files', async (_event, folderPath: string, extension: string) => {
   try {
-    if (!folderPath || !fs.existsSync(folderPath)) {
-      return [];
-    }
-
-    const files: string[] = [];
-
-    // Recursive function to search directories
-    function searchDirectory(dir: string, baseDir: string) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-
-        if (entry.isDirectory()) {
-          // Recursively search subdirectories
-          searchDirectory(fullPath, baseDir);
-        } else if (entry.isFile() && entry.name.endsWith(extension)) {
-          // Get relative path from base folder
-          const relativePath = path.relative(baseDir, fullPath);
-          files.push(relativePath);
-        }
-      }
-    }
-
-    searchDirectory(folderPath, folderPath);
-
-    // Sort files alphabetically
-    return files.sort();
+    return ops.getFilesRecursive(folderPath, extension);
   } catch (error) {
     console.error('Error reading directory:', error);
     return [];
@@ -526,153 +516,19 @@ ipcMain.handle('save-file', async (_event, filePath: string, content: string) =>
 // Scan workspace files
 ipcMain.handle('scan-workspace-files', async (_event, workspacePath: string) => {
   try {
-    if (!workspacePath || !fs.existsSync(workspacePath)) {
-      return { xml: [], xsl: [] };
-    }
-
-    const xmlFolder = path.join(workspacePath, 'xml');
-    const xslFolder = path.join(workspacePath, 'xsl');
-
-    // Recursive function to scan a folder and build tree structure
-    const scanFolderRecursive = (folderPath: string): any[] => {
-      const items: any[] = [];
-      
-      if (!fs.existsSync(folderPath)) {
-        return items;
-      }
-
-      const entries = fs.readdirSync(folderPath, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        const entryPath = path.join(folderPath, entry.name);
-
-        if (entry.isDirectory()) {
-          // Recursively scan subdirectory
-          const children = scanFolderRecursive(entryPath);
-          items.push({
-            name: entry.name,
-            path: entry.name, // Just the name, not full relative path
-            type: 'folder',
-            children: children
-          });
-        } else if (entry.isFile()) {
-          items.push({
-            name: entry.name,
-            path: entry.name, // Just the name, not full relative path
-            type: 'file'
-          });
-        }
-      }
-
-      // Sort: folders first, then files, both alphabetically
-      items.sort((a, b) => {
-        if (a.type === b.type) {
-          return a.name.localeCompare(b.name);
-        }
-        return a.type === 'folder' ? -1 : 1;
-      });
-
-      return items;
-    };
-
-    const xmlItems = scanFolderRecursive(xmlFolder);
-    const xslItems = scanFolderRecursive(xslFolder);
-
-    return {
-      xml: xmlItems,
-      xsl: xslItems
-    };
+    return ops.scanWorkspaceFiles(workspacePath);
   } catch (error) {
     console.error('Error scanning workspace files:', error);
     return { xml: [], xsl: [] };
   }
 });
 
-// Create workspace
+// Create workspace (in dev mode, example files are copied into the new workspace)
 ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspaceName: string) => {
   try {
-    if (!parentFolder || !workspaceName) {
-      throw new Error('Parent folder and workspace name are required');
-    }
-
-    // Create workspace folder
-    const workspacePath = path.join(parentFolder, workspaceName);
-
-    // Check if workspace already exists
-    if (fs.existsSync(workspacePath)) {
-      throw new Error('Workspace folder already exists');
-    }
-
-    // Create main workspace folder
-    fs.mkdirSync(workspacePath, { recursive: true });
-
-    // Create XML and XSL subfolders
-    const xmlFolder = path.join(workspacePath, 'xml');
-    const xslFolder = path.join(workspacePath, 'xsl');
-    fs.mkdirSync(xmlFolder, { recursive: true });
-    fs.mkdirSync(xslFolder, { recursive: true });
-
-    // Create .fop-editor-workspace.json
-    const workspaceConfig = {
-      workspaceName: workspaceName,
-      selectedXmlFile: null,
-      selectedXslFile: null,
-      autoGenerate: true,
-      openFiles: []
-    };
-    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
-    fs.writeFileSync(configPath, JSON.stringify(workspaceConfig, null, 2), 'utf-8');
-
-    // If in dev mode, copy example files
-    if (isDev) {
-      // In dev mode, examples are in the project root
-      // __dirname is dist-electron/, so go up one level to reach project root
-      const examplesPath = path.join(__dirname, '../examples');
-
-      if (fs.existsSync(examplesPath)) {
-        const exampleXmlPath = path.join(examplesPath, 'xml');
-        const exampleXslPath = path.join(examplesPath, 'xsl');
-
-        let copiedCount = 0;
-
-        // Copy XML files
-        if (fs.existsSync(exampleXmlPath)) {
-          const xmlFiles = fs.readdirSync(exampleXmlPath);
-          for (const file of xmlFiles) {
-            const srcPath = path.join(exampleXmlPath, file);
-            const destPath = path.join(xmlFolder, file);
-            if (fs.statSync(srcPath).isFile()) {
-              fs.copyFileSync(srcPath, destPath);
-              copiedCount++;
-            }
-          }
-        }
-
-        // Copy XSL files
-        if (fs.existsSync(exampleXslPath)) {
-          const xslFiles = fs.readdirSync(exampleXslPath);
-          for (const file of xslFiles) {
-            const srcPath = path.join(exampleXslPath, file);
-            const destPath = path.join(xslFolder, file);
-            if (fs.statSync(srcPath).isFile()) {
-              fs.copyFileSync(srcPath, destPath);
-              copiedCount++;
-            }
-          }
-        }
-
-        console.log(`Copied ${copiedCount} example files to workspace`);
-      } else {
-        console.log('Warning: Examples folder not found at:', examplesPath);
-      }
-    }
-
-    return {
-      success: true,
-      workspacePath: workspacePath
-    };
+    return ops.createWorkspace(parentFolder, workspaceName, isDev ? path.join(__dirname, '../examples') : undefined);
   } catch (error: any) {
-    console.error('Error creating workspace:', error);
+    console.error('Error in create-workspace:', error);
     throw error;
   }
 });
@@ -680,53 +536,9 @@ ipcMain.handle('create-workspace', async (_event, parentFolder: string, workspac
 // Open existing folder as workspace
 ipcMain.handle('open-folder-as-workspace', async (_event, folderPath: string) => {
   try {
-    if (!folderPath) {
-      throw new Error('Folder path is required');
-    }
-
-    // Check if folder exists
-    if (!fs.existsSync(folderPath)) {
-      throw new Error('Selected folder does not exist');
-    }
-
-    // Ensure xml/ and xsl/ folders exist (create if missing)
-    const xmlFolder = path.join(folderPath, 'xml');
-    const xslFolder = path.join(folderPath, 'xsl');
-    
-    if (!fs.existsSync(xmlFolder)) {
-      fs.mkdirSync(xmlFolder, { recursive: true });
-      console.log('Created xml/ folder');
-    }
-    
-    if (!fs.existsSync(xslFolder)) {
-      fs.mkdirSync(xslFolder, { recursive: true });
-      console.log('Created xsl/ folder');
-    }
-
-    // Check for workspace config file
-    const configPath = path.join(folderPath, '.fop-editor-workspace.json');
-    
-    if (!fs.existsSync(configPath)) {
-      // Create default workspace config
-      const folderName = path.basename(folderPath);
-      const workspaceConfig = {
-        workspaceName: folderName,
-        selectedXmlFile: null,
-        selectedXslFile: null,
-        autoGenerate: false,
-        openFiles: []
-      };
-      fs.writeFileSync(configPath, JSON.stringify(workspaceConfig, null, 2), 'utf-8');
-      console.log('Created .fop-editor-workspace.json with default settings');
-    }
-
-    return {
-      success: true,
-      workspacePath: folderPath,
-      workspaceName: path.basename(folderPath)
-    };
+    return ops.openFolderAsWorkspace(folderPath);
   } catch (error: any) {
-    console.error('Error opening folder as workspace:', error);
+    console.error('Error in open-folder-as-workspace:', error);
     throw error;
   }
 });
@@ -734,23 +546,9 @@ ipcMain.handle('open-folder-as-workspace', async (_event, folderPath: string) =>
 // Load workspace settings
 ipcMain.handle('load-workspace-settings', async (_event, workspacePath: string) => {
   try {
-    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
-
-    if (!fs.existsSync(configPath)) {
-      // Return default settings if file doesn't exist
-      return {
-        workspaceName: path.basename(workspacePath),
-        selectedXmlFile: '',
-        selectedXslFile: '',
-        autoGenerate: false,
-        openFiles: []
-      };
-    }
-
-    const content = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(content);
+    return ops.loadWorkspaceSettings(workspacePath);
   } catch (error: any) {
-    console.error('Error loading workspace settings:', error);
+    console.error('Error in load-workspace-settings:', error);
     throw error;
   }
 });
@@ -758,11 +556,9 @@ ipcMain.handle('load-workspace-settings', async (_event, workspacePath: string) 
 // Save workspace settings
 ipcMain.handle('save-workspace-settings', async (_event, workspacePath: string, settings: any) => {
   try {
-    const configPath = path.join(workspacePath, '.fop-editor-workspace.json');
-    fs.writeFileSync(configPath, JSON.stringify(settings, null, 2), 'utf-8');
-    return { success: true };
+    return ops.saveWorkspaceSettings(workspacePath, settings);
   } catch (error: any) {
-    console.error('Error saving workspace settings:', error);
+    console.error('Error in save-workspace-settings:', error);
     throw error;
   }
 });
@@ -770,42 +566,9 @@ ipcMain.handle('save-workspace-settings', async (_event, workspacePath: string, 
 // Create new file
 ipcMain.handle('create-file', async (_event, workspacePath: string, folderName: string, fileName: string) => {
   try {
-    // Validate filename
-    if (!fileName || fileName.trim() === '') {
-      throw new Error('Filename cannot be empty');
-    }
-
-    // Check for invalid characters in filename
-    const invalidChars = /[<>:"|?*\\/]/;
-    if (invalidChars.test(fileName)) {
-      throw new Error('Filename contains invalid characters');
-    }
-
-    // Construct full file path
-    const filePath = path.join(workspacePath, folderName, fileName);
-
-    // Check if file already exists
-    if (fs.existsSync(filePath)) {
-      throw new Error('A file with this name already exists');
-    }
-
-    // Ensure the folder exists
-    const folderPath = path.dirname(filePath);
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-    }
-
-    // Create empty file
-    fs.writeFileSync(filePath, '', 'utf-8');
-
-    console.log('Created file:', filePath);
-
-    return {
-      success: true,
-      filePath: path.join(folderName, fileName) // Return workspace-relative path
-    };
+    return ops.createFile(workspacePath, folderName, fileName);
   } catch (error: any) {
-    console.error('Error creating file:', error);
+    console.error('Error in create-file:', error);
     throw error;
   }
 });
@@ -813,46 +576,9 @@ ipcMain.handle('create-file', async (_event, workspacePath: string, folderName: 
 // Copy a file into a destination folder, auto-renaming to avoid overwriting an existing file
 ipcMain.handle('copy-file', async (_event, workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => {
   try {
-    const normalizedSource = sourceRelativePath.replace(/\//g, path.sep);
-    const sourceFullPath = path.join(workspacePath, normalizedSource);
-
-    if (!fs.existsSync(sourceFullPath)) {
-      throw new Error('Source file not found');
-    }
-    if (fs.statSync(sourceFullPath).isDirectory()) {
-      throw new Error('Cannot copy folders');
-    }
-
-    const normalizedDestFolder = destFolderRelativePath.replace(/\//g, path.sep);
-    const destFolderFullPath = path.join(workspacePath, normalizedDestFolder);
-    if (!fs.existsSync(destFolderFullPath)) {
-      fs.mkdirSync(destFolderFullPath, { recursive: true });
-    }
-
-    const originalName = path.basename(sourceFullPath);
-    const ext = path.extname(originalName);
-    const baseName = path.basename(originalName, ext);
-
-    // Find a non-colliding destination filename, appending " (copy)", " (copy 2)", etc.
-    let candidateName = originalName;
-    let destFullPath = path.join(destFolderFullPath, candidateName);
-    let counter = 1;
-    while (fs.existsSync(destFullPath)) {
-      candidateName = counter === 1 ? `${baseName} (copy)${ext}` : `${baseName} (copy ${counter})${ext}`;
-      destFullPath = path.join(destFolderFullPath, candidateName);
-      counter++;
-    }
-
-    fs.copyFileSync(sourceFullPath, destFullPath);
-
-    const destFolderName = destFolderRelativePath.replace(/\\/g, '/');
-    const newRelativePath = `${destFolderName}/${candidateName}`;
-
-    console.log('Copied file:', sourceFullPath, '->', destFullPath);
-
-    return { success: true, newPath: newRelativePath };
+    return ops.copyFile(workspacePath, sourceRelativePath, destFolderRelativePath);
   } catch (error: any) {
-    console.error('Error copying file:', error);
+    console.error('Error in copy-file:', error);
     throw error;
   }
 });
@@ -860,45 +586,9 @@ ipcMain.handle('copy-file', async (_event, workspacePath: string, sourceRelative
 // Move a file into a different folder (used by drag-and-drop file organization)
 ipcMain.handle('move-file', async (_event, workspacePath: string, sourceRelativePath: string, destFolderRelativePath: string) => {
   try {
-    const normalizedSource = sourceRelativePath.replace(/\//g, path.sep);
-    const sourceFullPath = path.join(workspacePath, normalizedSource);
-
-    if (!fs.existsSync(sourceFullPath)) {
-      throw new Error('Source file not found');
-    }
-    if (fs.statSync(sourceFullPath).isDirectory()) {
-      throw new Error('Cannot move folders');
-    }
-
-    const normalizedDestFolder = destFolderRelativePath.replace(/\//g, path.sep);
-    const destFolderFullPath = path.join(workspacePath, normalizedDestFolder);
-    if (!fs.existsSync(destFolderFullPath)) {
-      fs.mkdirSync(destFolderFullPath, { recursive: true });
-    }
-
-    const fileName = path.basename(sourceFullPath);
-    const destFullPath = path.join(destFolderFullPath, fileName);
-    const normalizedOldPath = sourceRelativePath.replace(/\\/g, '/');
-
-    if (path.resolve(destFullPath) === path.resolve(sourceFullPath)) {
-      // Already in the target folder - nothing to do
-      return { success: true, oldPath: normalizedOldPath, newPath: normalizedOldPath };
-    }
-
-    if (fs.existsSync(destFullPath)) {
-      throw new Error(`A file named "${fileName}" already exists in the destination folder`);
-    }
-
-    fs.renameSync(sourceFullPath, destFullPath);
-
-    const destFolderName = destFolderRelativePath.replace(/\\/g, '/');
-    const newRelativePath = `${destFolderName}/${fileName}`;
-
-    console.log('Moved file:', sourceFullPath, '->', destFullPath);
-
-    return { success: true, oldPath: normalizedOldPath, newPath: newRelativePath };
+    return ops.moveFile(workspacePath, sourceRelativePath, destFolderRelativePath);
   } catch (error: any) {
-    console.error('Error moving file:', error);
+    console.error('Error in move-file:', error);
     throw error;
   }
 });
@@ -906,36 +596,9 @@ ipcMain.handle('move-file', async (_event, workspacePath: string, sourceRelative
 // Create folder
 ipcMain.handle('create-folder', async (_event, workspacePath: string, parentFolderPath: string, folderName: string) => {
   try {
-    // Validate folder name
-    if (!folderName || folderName.trim() === '') {
-      throw new Error('Folder name cannot be empty');
-    }
-
-    // Check for invalid characters in folder name
-    const invalidChars = /[<>:"|?*\\/]/;
-    if (invalidChars.test(folderName)) {
-      throw new Error('Folder name contains invalid characters');
-    }
-
-    // Construct full folder path
-    const fullFolderPath = path.join(workspacePath, parentFolderPath, folderName);
-
-    // Check if folder already exists
-    if (fs.existsSync(fullFolderPath)) {
-      throw new Error('A folder with this name already exists');
-    }
-
-    // Create folder
-    fs.mkdirSync(fullFolderPath, { recursive: true });
-
-    console.log('Created folder:', fullFolderPath);
-
-    return {
-      success: true,
-      folderPath: path.join(parentFolderPath, folderName) // Return workspace-relative path
-    };
+    return ops.createFolder(workspacePath, parentFolderPath, folderName);
   } catch (error: any) {
-    console.error('Error creating folder:', error);
+    console.error('Error in create-folder:', error);
     throw error;
   }
 });
@@ -943,42 +606,9 @@ ipcMain.handle('create-folder', async (_event, workspacePath: string, parentFold
 // Delete folder
 ipcMain.handle('delete-folder', async (_event, workspacePath: string, folderPath: string) => {
   try {
-    // Prevent deletion of root xml and xsl folders
-    if (folderPath === 'xml' || folderPath === 'xsl') {
-      throw new Error('Cannot delete root xml or xsl folders');
-    }
-
-    // Validate that the path is within the workspace
-    const normalizedFolderPath = folderPath.replace(/\//g, path.sep);
-    const fullFolderPath = path.join(workspacePath, normalizedFolderPath);
-    
-    // Security check: ensure the path is within workspace
-    const relativePath = path.relative(workspacePath, fullFolderPath);
-    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-      throw new Error('Invalid folder path: outside workspace');
-    }
-
-    // Check if folder exists
-    if (!fs.existsSync(fullFolderPath)) {
-      throw new Error('Folder not found');
-    }
-
-    // Check if it's actually a folder
-    const stats = fs.statSync(fullFolderPath);
-    if (!stats.isDirectory()) {
-      throw new Error('Path is not a folder');
-    }
-
-    // Delete folder recursively
-    fs.rmSync(fullFolderPath, { recursive: true, force: true });
-
-    console.log('Deleted folder:', fullFolderPath);
-
-    return {
-      success: true
-    };
+    return ops.deleteFolder(workspacePath, folderPath);
   } catch (error: any) {
-    console.error('Error deleting folder:', error);
+    console.error('Error in delete-folder:', error);
     throw error;
   }
 });
@@ -986,65 +616,9 @@ ipcMain.handle('delete-folder', async (_event, workspacePath: string, folderPath
 // Rename folder
 ipcMain.handle('rename-folder', async (_event, workspacePath: string, oldFolderPath: string, newFolderName: string) => {
   try {
-    // Prevent renaming of root xml and xsl folders
-    if (oldFolderPath === 'xml' || oldFolderPath === 'xsl') {
-      throw new Error('Cannot rename root xml or xsl folders');
-    }
-
-    // Validate new folder name
-    if (!newFolderName || newFolderName.trim() === '') {
-      throw new Error('Folder name cannot be empty');
-    }
-
-    // Check for invalid characters in folder name
-    const invalidChars = /[<>:"|?*\\/]/;
-    if (invalidChars.test(newFolderName)) {
-      throw new Error('Folder name contains invalid characters');
-    }
-
-    // Normalize the relative path
-    const normalizedOldPath = oldFolderPath.replace(/\//g, path.sep);
-    const oldFullPath = path.join(workspacePath, normalizedOldPath);
-    
-    // Get parent folder path
-    const parentFolder = path.dirname(oldFullPath);
-    const newFullPath = path.join(parentFolder, newFolderName);
-
-    // Check if old folder exists
-    if (!fs.existsSync(oldFullPath)) {
-      throw new Error('Folder not found');
-    }
-
-    // Check if it's actually a folder
-    const stats = fs.statSync(oldFullPath);
-    if (!stats.isDirectory()) {
-      throw new Error('Path is not a folder');
-    }
-
-    // Check if new folder name already exists
-    if (fs.existsSync(newFullPath) && oldFullPath !== newFullPath) {
-      throw new Error('A folder with this name already exists');
-    }
-
-    // Rename folder
-    fs.renameSync(oldFullPath, newFullPath);
-
-    // Build new relative path
-    const parentRelativePath = path.relative(workspacePath, parentFolder);
-    const newRelativePath = parentRelativePath ? `${parentRelativePath}${path.sep}${newFolderName}` : newFolderName;
-    
-    // Convert back to forward slashes for consistency
-    const newRelativePathNormalized = newRelativePath.replace(/\\/g, '/');
-
-    console.log('Successfully renamed folder:', oldFullPath, '->', newFullPath);
-
-    return {
-      success: true,
-      oldPath: oldFolderPath,
-      newPath: newRelativePathNormalized
-    };
+    return ops.renameFolder(workspacePath, oldFolderPath, newFolderName);
   } catch (error: any) {
-    console.error('Error renaming folder:', error);
+    console.error('Error in rename-folder:', error);
     throw error;
   }
 });
@@ -1052,207 +626,29 @@ ipcMain.handle('rename-folder', async (_event, workspacePath: string, oldFolderP
 // Rename file
 ipcMain.handle('rename-file', async (_event, workspacePath: string, oldRelativePath: string, newFileName: string) => {
   try {
-    // Validate new filename
-    if (!newFileName || newFileName.trim() === '') {
-      throw new Error('Filename cannot be empty');
-    }
-
-    // Check for invalid characters in filename
-    const invalidChars = /[<>:"|?*\\/]/;
-    if (invalidChars.test(newFileName)) {
-      throw new Error('Filename contains invalid characters');
-    }
-
-    // Normalize the relative path (convert forward slashes to backslashes on Windows)
-    const normalizedOldRelativePath = oldRelativePath.replace(/\//g, path.sep);
-    
-    // Construct full paths
-    const oldFullPath = path.join(workspacePath, normalizedOldRelativePath);
-    const folderPath = path.dirname(oldFullPath);
-    const newFullPath = path.join(folderPath, newFileName);
-
-    console.log('Rename operation:');
-    console.log('  Old relative:', oldRelativePath);
-    console.log('  Old full:', oldFullPath);
-    console.log('  New full:', newFullPath);
-
-    // Check if old file exists
-    if (!fs.existsSync(oldFullPath)) {
-      throw new Error(`Original file not found: ${oldFullPath}`);
-    }
-
-    // Check if new filename already exists
-    if (fs.existsSync(newFullPath) && oldFullPath !== newFullPath) {
-      throw new Error('A file with this name already exists');
-    }
-
-    // Get the folder name (xml or xsl)
-    const folderName = path.basename(folderPath);
-    // Return path with forward slashes for consistency with file scanner
-    const newRelativePath = `${folderName}/${newFileName}`;
-
-    // Rename file on disk
-    fs.renameSync(oldFullPath, newFullPath);
-
-    console.log('Successfully renamed file to:', newFullPath);
-
-    return {
-      success: true,
-      oldPath: oldRelativePath,
-      newPath: newRelativePath
-    };
+    return ops.renameFile(workspacePath, oldRelativePath, newFileName);
   } catch (error: any) {
-    console.error('Error renaming file:', error);
+    console.error('Error in rename-file:', error);
     throw error;
   }
 });
 
-// Delete file
+// Delete file (moved to the recycle bin instead of permanent deletion)
 ipcMain.handle('delete-file', async (_event, workspacePath: string, filePath: string) => {
   try {
-    // Normalize the relative path (convert forward slashes to backslashes on Windows)
-    const normalizedFilePath = filePath.replace(/\//g, path.sep);
-    
-    // Construct full path
-    const fullPath = path.join(workspacePath, normalizedFilePath);
-
-    console.log('Delete operation:');
-    console.log('  File path:', filePath);
-    console.log('  Full path:', fullPath);
-
-    // Check if file exists
-    if (!fs.existsSync(fullPath)) {
-      throw new Error('File not found');
-    }
-
-    // Check if path is a directory
-    const stats = fs.statSync(fullPath);
-    if (stats.isDirectory()) {
-      throw new Error('Cannot delete folders (only files can be deleted)');
-    }
-
-    // Validate path is within workspace
-    const resolvedFullPath = path.resolve(fullPath);
-    const resolvedWorkspacePath = path.resolve(workspacePath);
-    if (!resolvedFullPath.startsWith(resolvedWorkspacePath)) {
-      throw new Error('Cannot delete file: path is outside workspace');
-    }
-
-    // Move file to recycle bin instead of permanent deletion
-    await shell.trashItem(fullPath);
-
-    console.log('Successfully moved file to recycle bin:', fullPath);
-
-    return {
-      success: true,
-      deletedPath: filePath
-    };
+    return await ops.deleteFile(workspacePath, filePath, fullPath => shell.trashItem(fullPath));
   } catch (error: any) {
-    console.error('Error deleting file:', error);
+    console.error('Error in delete-file:', error);
     throw error;
   }
 });
 
 // Search workspace files
-ipcMain.handle('search-workspace', async (_event, workspacePath: string, searchQuery: string, options: { caseSensitive: boolean; useRegex: boolean }) => {
+ipcMain.handle('search-workspace', async (_event, workspacePath: string, searchQuery: string, options: ops.SearchOptions) => {
   try {
-    const results: Array<{
-      file: string;
-      matches: Array<{
-        line: number;
-        column: number;
-        text: string;
-        matchText: string;
-      }>;
-    }> = [];
-
-    const xmlFolder = path.join(workspacePath, 'xml');
-    const xslFolder = path.join(workspacePath, 'xsl');
-
-    // Function to search in a file
-    const searchFile = (filePath: string, relativePath: string) => {
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
-        const fileMatches: Array<{
-          line: number;
-          column: number;
-          text: string;
-          matchText: string;
-        }> = [];
-
-        let searchPattern: RegExp;
-        if (options.useRegex) {
-          try {
-            searchPattern = new RegExp(searchQuery, options.caseSensitive ? 'g' : 'gi');
-          } catch (e) {
-            // Invalid regex, treat as literal text
-            const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            searchPattern = new RegExp(escapedQuery, options.caseSensitive ? 'g' : 'gi');
-          }
-        } else {
-          const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          searchPattern = new RegExp(escapedQuery, options.caseSensitive ? 'g' : 'gi');
-        }
-
-        lines.forEach((lineText, lineIndex) => {
-          let match;
-          searchPattern.lastIndex = 0; // Reset regex state
-          
-          while ((match = searchPattern.exec(lineText)) !== null) {
-            fileMatches.push({
-              line: lineIndex + 1,
-              column: match.index + 1,
-              text: lineText.trim(),
-              matchText: match[0]
-            });
-            
-            // Prevent infinite loop for zero-width matches
-            if (match.index === searchPattern.lastIndex) {
-              searchPattern.lastIndex++;
-            }
-          }
-        });
-
-        if (fileMatches.length > 0) {
-          results.push({
-            file: relativePath,
-            matches: fileMatches
-          });
-        }
-      } catch (error) {
-        console.error(`Error searching file ${filePath}:`, error);
-      }
-    };
-
-    // Recursively search directory
-    const searchDirectory = (dirPath: string, folderName: string) => {
-      if (!fs.existsSync(dirPath)) return;
-
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        
-        if (entry.isDirectory()) {
-          searchDirectory(fullPath, folderName);
-        } else if (entry.isFile() && (entry.name.endsWith('.xml') || entry.name.endsWith('.xsl') || entry.name.endsWith('.xslt'))) {
-          const relativePath = path.relative(workspacePath, fullPath).replace(/\\/g, '/');
-          searchFile(fullPath, relativePath);
-        }
-      }
-    };
-
-    // Search both folders
-    searchDirectory(xmlFolder, 'xml');
-    searchDirectory(xslFolder, 'xsl');
-
-    return {
-      success: true,
-      results
-    };
+    return ops.searchWorkspace(workspacePath, searchQuery, options);
   } catch (error: any) {
-    console.error('Error searching workspace:', error);
+    console.error('Error in search-workspace:', error);
     throw error;
   }
 });
@@ -1499,39 +895,7 @@ ipcMain.handle('validate-fop-directory', async (_event, fopPath: string) => {
   return await validateFopDirectory(fopPath);
 });
 
-// Helper function to validate FOP directory
-async function validateFopDirectory(fopPath: string) {
-  try {
-    if (!fopPath || !fs.existsSync(fopPath)) {
-      return { valid: false, error: 'Directory does not exist' };
-    }
-
-    // Check for required directories and files
-    const buildDir = path.join(fopPath, 'build');
-    const libDir = path.join(fopPath, 'lib');
-
-    if (!fs.existsSync(buildDir)) {
-      return { valid: false, error: 'Missing build directory' };
-    }
-    
-    if (!fs.existsSync(libDir)) {
-      return { valid: false, error: 'Missing lib directory' };
-    }
-
-    // Check for any fop jar (not necessarily 2.11)
-    const buildFiles = fs.readdirSync(buildDir);
-    const fopJars = buildFiles.filter(file => file.startsWith('fop') && file.endsWith('.jar'));
-    
-    if (fopJars.length === 0) {
-      return { valid: false, error: 'No FOP JAR found in build directory' };
-    }
-
-    return { valid: true, fopJar: fopJars[0] };
-  } catch (error) {
-    console.error('Error validating FOP directory:', error);
-    return { valid: false, error: 'Failed to validate directory' };
-  }
-}
+const validateFopDirectory = async (fopPath: string) => ops.validateFopDirectory(fopPath);
 
 ipcMain.handle('select-fop-directory', async () => {
   const result = await dialog.showOpenDialog({
@@ -1577,24 +941,7 @@ ipcMain.handle('validate-jre-directory', async (_event, jrePath: string) => {
   return await validateJreDirectory(jrePath);
 });
 
-// Helper function to validate a JRE/JDK directory
-async function validateJreDirectory(jrePath: string) {
-  try {
-    if (!jrePath || !fs.existsSync(jrePath)) {
-      return { valid: false, error: 'Directory does not exist' };
-    }
-
-    const javaExe = path.join(jrePath, 'bin', 'java.exe');
-    if (!fs.existsSync(javaExe)) {
-      return { valid: false, error: 'No bin/java.exe found in this directory' };
-    }
-
-    return { valid: true };
-  } catch (error) {
-    console.error('Error validating JRE directory:', error);
-    return { valid: false, error: 'Failed to validate directory' };
-  }
-}
+const validateJreDirectory = async (jrePath: string) => ops.validateJreDirectory(jrePath);
 
 ipcMain.handle('select-jre-directory', async () => {
   const result = await dialog.showOpenDialog({

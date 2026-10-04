@@ -128,8 +128,8 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose }) => {
         window.electronAPI.setSkipDeleteConfirm(skipDeleteConfirm),
       ]);
 
-      const fopChanged = initialFop.useBundled !== fopSettings.useBundled || initialFop.customPath !== fopSelectedPath;
-      const jreChanged = initialJre.useBundled !== jreSettings.useBundled || initialJre.customPath !== jreSelectedPath;
+      const fopChanged = initialFop.useBundled !== fopSettings.useBundled || (initialFop.customPath || '') !== fopSelectedPath;
+      const jreChanged = initialJre.useBundled !== jreSettings.useBundled || (initialJre.customPath || '') !== jreSelectedPath;
 
       if (fopChanged || jreChanged) {
         const shouldRestart = window.confirm(
